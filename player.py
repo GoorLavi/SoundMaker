@@ -115,7 +115,12 @@ def main():
     
     # Initialize components
     logger.info("Initializing components...")
-    audio_controller = AudioController(config['stream_url'], config['volume'])
+    audio_controller = AudioController(
+        config['stream_url'],
+        config['volume'],
+        audio_format=config.get('audio_format'),
+        audio_samplerate=config.get('audio_samplerate'),
+    )
     airplay_manager = AirPlayManager()
     
     # Setup AirPlay IPC

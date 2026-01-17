@@ -22,7 +22,7 @@ class AudioState(Enum):
 class AudioController:
     """Main controller for managing audio sources"""
     
-    def __init__(self, stream_url, volume=100):
+    def __init__(self, stream_url, volume=100, audio_format=None, audio_samplerate=None):
         """
         Initialize AudioController
         
@@ -30,7 +30,12 @@ class AudioController:
             stream_url: URL of the stream to play
             volume: Volume level (0-100)
         """
-        self.stream_player = StreamPlayer(stream_url, volume)
+        self.stream_player = StreamPlayer(
+            stream_url,
+            volume,
+            audio_format=audio_format,
+            audio_samplerate=audio_samplerate,
+        )
         self.state = AudioState.IDLE
         self.stream_url = stream_url
         self.volume = volume

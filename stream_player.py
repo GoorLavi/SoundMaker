@@ -16,16 +16,20 @@ logger = logging.getLogger('soundmaker.stream_player')
 class StreamPlayer:
     """Manages internet stream playback using mpv"""
     
-    def __init__(self, stream_url, volume=100):
+    def __init__(self, stream_url, volume=100, audio_format=None, audio_samplerate=None):
         """
         Initialize StreamPlayer
         
         Args:
             stream_url: URL of the stream to play
             volume: Volume level (0-100)
+            audio_format: Optional audio format to force (e.g., s16)
+            audio_samplerate: Optional sample rate to force (e.g., 44100)
         """
         self.stream_url = stream_url
         self.volume = volume
+        self.audio_format = audio_format
+        self.audio_samplerate = audio_samplerate
         self.process = None
         self.restart_count = 0
         self.max_restart_attempts = 10
@@ -71,6 +75,12 @@ class StreamPlayer:
             f"--volume={self.volume}",
             self.stream_url
         ]
+
+        # Optional quality hints
+        if self.audio_format:
+            cmd.insert(-1, f"--audio-format={self.audio_format}")
+        if self.audio_samplerate:
+            cmd.insert(-1, f"--audio-samplerate={self.audio_samplerate}")
         
         logger.info(f"Starting stream: {self.stream_url}")
         logger.debug(f"Command: {' '.join(cmd)}")

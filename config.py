@@ -12,6 +12,8 @@ DEFAULT_STREAM_URL = "https://uk3.internet-radio.com/proxy/1940sradio/stream"
 DEFAULT_VOLUME = 100
 MAX_RESTART_ATTEMPTS = 10
 RESTART_DELAY = 3
+DEFAULT_AUDIO_FORMAT = "s16"
+DEFAULT_AUDIO_SAMPLERATE = 44100
 
 
 def parse_arguments():
@@ -56,6 +58,20 @@ Examples:
         help='Enable verbose/debug logging'
     )
     
+    parser.add_argument(
+        '--audio-format',
+        type=str,
+        default=DEFAULT_AUDIO_FORMAT,
+        help=f'Force audio format for mpv (e.g., s16); default: {DEFAULT_AUDIO_FORMAT}'
+    )
+    
+    parser.add_argument(
+        '--audio-samplerate',
+        type=int,
+        default=DEFAULT_AUDIO_SAMPLERATE,
+        help=f'Force audio sample rate for mpv; default: {DEFAULT_AUDIO_SAMPLERATE}'
+    )
+    
     return parser.parse_args()
 
 
@@ -65,6 +81,8 @@ def get_config_from_args(args):
         'stream_url': args.url,
         'volume': args.volume,
         'test_mode': args.test,
-        'verbose': args.verbose
+        'verbose': args.verbose,
+        'audio_format': args.audio_format,
+        'audio_samplerate': args.audio_samplerate,
     }
 

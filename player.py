@@ -8,7 +8,6 @@ import signal
 import sys
 import time
 import logging
-from pathlib import Path
 
 from config import parse_arguments, get_config_from_args, DEFAULT_STREAM_URL, RESTART_DELAY
 from logger_setup import setup_logging
@@ -16,43 +15,51 @@ from utils import test_stream_accessibility
 from stream_player import StreamPlayer
 from audio_controller import AudioController, AudioState
 from airplay_manager import AirPlayManager
+import state_service
 
 # Global references for signal handling
 audio_controller = None
 airplay_manager = None
 logger = None
 
-# State file for LED controller
-STATE_FILE = Path("/tmp/soundmaker_state")
 
-
-def write_state_file(state):
+def process_command(controller):
     """
-    Write audio state to file for LED controller
+    Check for and process commands from command file
     
     Args:
-        state: AudioState enum value or string ('streaming', 'airplay', 'idle')
+        controller: AudioController instance
+        
+    Returns:
+        bool: True if a command was processed
     """
-    try:
-        # Convert AudioState enum to string if needed
-        if isinstance(state, AudioState):
-            state_str = state.value
-        else:
-            state_str = str(state).lower()
+    command = state_service.read_command()
+    if not command:
+        return False
+    
+    action = command.get('action', '').lower()
+    log = logging.getLogger('soundmaker')
+    
+    # Ignore commands during AirPlay
+    if not controller.is_controllable():
+        log.debug(f"Ignoring command '{action}' - AirPlay active")
+        return True
+    
+    if action == 'set_volume':
+        value = command.get('value', 100)
+        controller.set_volume(value)
+        state_service.write_state_from_controller(controller)
         
-        # Ensure directory exists (it should, but be safe)
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Atomic write: write to temp file, then rename
-        temp_file = STATE_FILE.with_suffix('.tmp')
-        with open(temp_file, 'w') as f:
-            f.write(state_str + '\n')
-        temp_file.replace(STATE_FILE)
-        
-    except Exception as e:
-        # Log warning but don't crash the main service
-        log = logging.getLogger('soundmaker')
-        log.warning(f"Failed to write state file: {e}")
+    elif action == 'play':
+        if controller.get_state() != AudioState.STREAMING:
+            controller.start_streaming()
+            state_service.write_state_from_controller(controller)
+            
+    elif action == 'stop':
+        controller.stop_streaming()
+        state_service.write_state_from_controller(controller)
+    
+    return True
 
 
 def signal_handler(sig, frame):
@@ -62,7 +69,7 @@ def signal_handler(sig, frame):
     log.info(f"Received shutdown signal ({sig}), shutting down...")
     
     # Write 'idle' state before shutdown
-    write_state_file('idle')
+    state_service.write_state(mode="idle", volume=0, playback="stopped")
     
     if audio_controller:
         audio_controller.shutdown()
@@ -155,7 +162,7 @@ def main():
         sys.exit(1)
     
     # Write initial state
-    write_state_file(audio_controller.get_state())
+    state_service.write_state_from_controller(audio_controller)
     
     # Main loop
     logger.info("Entering main loop...")
@@ -168,18 +175,21 @@ def main():
                 if event == 'connect':
                     logger.info("AirPlay device connected - switching to AirPlay mode")
                     audio_controller.switch_to_airplay()
-                    write_state_file(audio_controller.get_state())
+                    state_service.write_state_from_controller(audio_controller)
                 elif event == 'disconnect':
                     logger.info("AirPlay device disconnected - switching to streaming mode")
                     audio_controller.switch_to_streaming()
-                    write_state_file(audio_controller.get_state())
+                    state_service.write_state_from_controller(audio_controller)
+            
+            # Check for commands from Homebridge/external control
+            process_command(audio_controller)
             
             # Monitor streaming state
             current_state = audio_controller.get_state()
             
             # Write state file if state changed
             if current_state != last_state:
-                write_state_file(current_state)
+                state_service.write_state_from_controller(audio_controller)
                 last_state = current_state
             
             if current_state == AudioState.STREAMING:
@@ -194,15 +204,15 @@ def main():
                         time.sleep(RESTART_DELAY)
                         # Update state to IDLE so start_streaming will actually start
                         audio_controller.state = AudioState.IDLE
-                        write_state_file(audio_controller.get_state())
+                        state_service.write_state_from_controller(audio_controller)
                         if audio_controller.start_streaming():
                             # Reset restart count only on successful start
                             audio_controller.stream_player.reset_restart_count()
-                            write_state_file(audio_controller.get_state())
+                            state_service.write_state_from_controller(audio_controller)
                             logger.info("Streaming restarted successfully")
                         else:
                             logger.error("Failed to restart streaming")
-                            write_state_file(audio_controller.get_state())
+                            state_service.write_state_from_controller(audio_controller)
                             time.sleep(RESTART_DELAY)
                     else:
                         logger.info("Streaming stopped, exiting main loop")
@@ -218,10 +228,10 @@ def main():
                 logger.info("In IDLE state, starting streaming...")
                 if not audio_controller.start_streaming():
                     logger.warning("Failed to start streaming from IDLE state")
-                    write_state_file(audio_controller.get_state())
+                    state_service.write_state_from_controller(audio_controller)
                     time.sleep(1)
                 else:
-                    write_state_file(audio_controller.get_state())
+                    state_service.write_state_from_controller(audio_controller)
                     time.sleep(0.5)
                 
     except KeyboardInterrupt:

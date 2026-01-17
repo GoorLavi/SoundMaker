@@ -17,6 +17,8 @@ SERVICE_NAME="soundmaker.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
 LED_SERVICE_NAME="soundmaker-leds.service"
 LED_SERVICE_FILE="/etc/systemd/system/${LED_SERVICE_NAME}"
+BRIDGE_SERVICE_NAME="soundmaker-bridge.service"
+BRIDGE_SERVICE_FILE="/etc/systemd/system/${BRIDGE_SERVICE_NAME}"
 BACKUP_DIR="/opt/soundmaker_backup"
 
 # Wi-Fi Provisioning Configuration
@@ -249,6 +251,25 @@ handle_existing_installation() {
         systemctl disable "$LED_SERVICE_NAME" || true
     fi
     
+    # Check if bridge service exists and is running
+    if systemctl list-unit-files | grep -q "^${BRIDGE_SERVICE_NAME}"; then
+        if systemctl is-active --quiet "$BRIDGE_SERVICE_NAME" 2>/dev/null; then
+            print_info "Stopping existing bridge service..."
+            systemctl stop "$BRIDGE_SERVICE_NAME" || true
+        fi
+        
+        print_info "Disabling existing bridge service..."
+        systemctl disable "$BRIDGE_SERVICE_NAME" || true
+    fi
+    
+    # Check if Homebridge exists and is running
+    if systemctl list-unit-files | grep -q "^homebridge.service"; then
+        if systemctl is-active --quiet homebridge 2>/dev/null; then
+            print_info "Stopping existing Homebridge..."
+            systemctl stop homebridge || true
+        fi
+    fi
+    
     # Check if application directory exists
     if [ -d "$APP_DIR" ] && [ "$(ls -A $APP_DIR 2>/dev/null)" ]; then
         print_warning "Existing installation found at $APP_DIR"
@@ -437,10 +458,13 @@ copy_files() {
         fi
     done
     
-    # Make player.py and led_controller.py executable
+    # Make executable scripts
     chmod +x "$APP_DIR/player.py"
     if [ -f "$APP_DIR/led_controller.py" ]; then
         chmod +x "$APP_DIR/led_controller.py"
+    fi
+    if [ -f "$APP_DIR/homebridge_bridge.py" ]; then
+        chmod +x "$APP_DIR/homebridge_bridge.py"
     fi
     
     # Copy hook script if it exists
@@ -558,6 +582,173 @@ enable_led_service() {
     fi
 }
 
+create_bridge_service_file() {
+    print_info "Creating Homebridge Bridge service file..."
+    cat > "$BRIDGE_SERVICE_FILE" << EOF
+[Unit]
+Description=SoundMaker Homebridge Bridge
+After=soundmaker.service
+Wants=soundmaker.service
+
+[Service]
+Type=simple
+User=${USERNAME}
+Group=${USERNAME}
+WorkingDirectory=${APP_DIR}
+ExecStart=/usr/bin/python3 ${APP_DIR}/homebridge_bridge.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    print_info "Bridge service file created: $BRIDGE_SERVICE_FILE"
+}
+
+enable_bridge_service() {
+    print_info "Enabling Homebridge Bridge service..."
+    systemctl daemon-reload
+    systemctl enable "$BRIDGE_SERVICE_NAME"
+    systemctl start "$BRIDGE_SERVICE_NAME"
+    
+    sleep 1
+    
+    if systemctl is-active --quiet "$BRIDGE_SERVICE_NAME"; then
+        print_info "Bridge service is running successfully!"
+    else
+        print_warning "Bridge service may not be running. Check: sudo systemctl status $BRIDGE_SERVICE_NAME"
+    fi
+}
+
+install_homebridge() {
+    print_info "Installing Homebridge for Apple Home integration..."
+    
+    # Check if Node.js is installed
+    if ! command -v node &> /dev/null; then
+        print_info "Installing Node.js..."
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+        apt-get install -y nodejs
+    else
+        print_info "Node.js already installed: $(node --version)"
+    fi
+    
+    # Install Homebridge and plugins globally
+    print_info "Installing Homebridge and HTTP plugin..."
+    npm install -g --unsafe-perm homebridge homebridge-http-switch homebridge-http-lightbulb
+    
+    print_info "Homebridge installed successfully"
+}
+
+configure_homebridge() {
+    print_info "Configuring Homebridge..."
+    
+    HOMEBRIDGE_DIR="/var/lib/homebridge"
+    HOMEBRIDGE_CONFIG="$HOMEBRIDGE_DIR/config.json"
+    
+    mkdir -p "$HOMEBRIDGE_DIR"
+    
+    # HomeKit pairing PIN
+    PIN="031-45-154"
+    
+    # Use 'EOF' (quoted) to prevent shell expansion of backslashes in regex
+    cat > "$HOMEBRIDGE_CONFIG" << 'EOFCONFIG'
+{
+    "bridge": {
+        "name": "SoundMaker",
+        "username": "CC:22:3D:E3:CE:30",
+        "port": 51826,
+        "pin": "031-45-154"
+    },
+    "accessories": [
+        {
+            "accessory": "HTTP-SWITCH",
+            "name": "SoundMaker Radio",
+            "switchType": "stateful",
+            "onUrl": {
+                "url": "http://127.0.0.1:8080/playback",
+                "method": "POST",
+                "body": "{\"action\":\"play\"}",
+                "headers": {"Content-Type": "application/json"}
+            },
+            "offUrl": {
+                "url": "http://127.0.0.1:8080/playback",
+                "method": "POST",
+                "body": "{\"action\":\"stop\"}",
+                "headers": {"Content-Type": "application/json"}
+            },
+            "statusUrl": {
+                "url": "http://127.0.0.1:8080/playback",
+                "method": "GET"
+            },
+            "statusPattern": "\"playback\":\\s*\"playing\""
+        },
+        {
+            "accessory": "HTTP-LIGHTBULB",
+            "name": "SoundMaker Volume",
+            "onUrl": "http://127.0.0.1:8080/health",
+            "offUrl": "http://127.0.0.1:8080/health",
+            "statusUrl": "http://127.0.0.1:8080/state",
+            "statusPattern": "\"mode\":\\s*\"streaming\"",
+            "brightness": {
+                "setUrl": {
+                    "url": "http://127.0.0.1:8080/volume",
+                    "method": "POST",
+                    "body": "{\"volume\":%s}",
+                    "headers": {"Content-Type": "application/json"}
+                },
+                "statusUrl": "http://127.0.0.1:8080/volume",
+                "statusPattern": "\"volume\":\\s*(\\d+)"
+            }
+        }
+    ],
+    "platforms": []
+}
+EOFCONFIG
+    
+    chown -R homebridge:homebridge "$HOMEBRIDGE_DIR" 2>/dev/null || chown -R root:root "$HOMEBRIDGE_DIR"
+    
+    print_info "Homebridge configured at $HOMEBRIDGE_CONFIG"
+    print_info "HomeKit PIN: ${PIN}"
+}
+
+create_homebridge_service() {
+    print_info "Creating Homebridge service..."
+    
+    cat > /etc/systemd/system/homebridge.service << EOF
+[Unit]
+Description=Homebridge
+After=network-online.target soundmaker-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/homebridge -U /var/lib/homebridge
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable homebridge
+    systemctl start homebridge
+    
+    sleep 2
+    
+    if systemctl is-active --quiet homebridge; then
+        print_info "Homebridge is running!"
+    else
+        print_warning "Homebridge may not be running. Check: sudo systemctl status homebridge"
+    fi
+}
+
 verify_installation() {
     print_info "Verifying installation..."
     
@@ -573,6 +764,20 @@ verify_installation() {
         print_info "✓ LED service is active"
     else
         print_warning "✗ LED service is not active"
+    fi
+    
+    # Check if bridge service is active
+    if systemctl is-active --quiet "$BRIDGE_SERVICE_NAME" 2>/dev/null; then
+        print_info "✓ Bridge service is active"
+    else
+        print_warning "✗ Bridge service is not active"
+    fi
+    
+    # Check if Homebridge is active
+    if systemctl is-active --quiet homebridge 2>/dev/null; then
+        print_info "✓ Homebridge is active"
+    else
+        print_warning "✗ Homebridge is not active"
     fi
     
     # Check if mpv process is running
@@ -657,12 +862,19 @@ main() {
     enable_service
     create_led_service_file
     enable_led_service
+    create_bridge_service_file
+    enable_bridge_service
+    install_homebridge
+    configure_homebridge
+    create_homebridge_service
     
     print_info "Restarting shairport-sync and SoundMaker to apply PulseAudio settings..."
     systemctl daemon-reload
     systemctl restart shairport-sync
     systemctl restart "$SERVICE_NAME"
     systemctl restart "$LED_SERVICE_NAME" || true
+    systemctl restart "$BRIDGE_SERVICE_NAME" || true
+    systemctl restart homebridge || true
     
     echo ""
     verify_installation

@@ -100,26 +100,51 @@ ip a show wlan0            # Show IP address
 
 ## Application Components
 
-| File                  | Responsibility                                                                   |
-| --------------------- | -------------------------------------------------------------------------------- |
-| `player.py`           | Entry point, signal handling, logging, main loop, writes `/tmp/soundmaker_state` |
-| `audio_controller.py` | State machine (STREAMING, AIRPLAY, IDLE, TRANSITIONING); stop/start logic        |
-| `stream_player.py`    | Manages `mpv` process; restart logic; passes `XDG_RUNTIME_DIR` to subprocess     |
-| `airplay_manager.py`  | Sets up FIFO `/tmp/soundmaker_airplay_events`, checks shairport status           |
-| `airplay_hook.sh`     | Called by shairport hooks; writes `connect`/`disconnect` to FIFO with retries    |
-| `led_controller.py`   | Reads `/tmp/soundmaker_state`, drives GPIO LEDs                                  |
-| `config.py`           | CLI argument parsing and configuration                                           |
-| `logger_setup.py`     | Logging setup with file rotation                                                 |
-| `utils.py`            | Helper functions                                                                 |
+| File                   | Responsibility                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `player.py`            | Entry point, signal handling, main loop, command processing                     |
+| `audio_controller.py`  | State machine (STREAMING, AIRPLAY, IDLE, TRANSITIONING); volume via pactl       |
+| `stream_player.py`     | Manages `mpv` process; restart logic; passes `XDG_RUNTIME_DIR` to subprocess    |
+| `state_service.py`     | Centralized state/command file I/O; JSON read/write; atomic operations          |
+| `airplay_manager.py`   | Sets up FIFO `/tmp/soundmaker_airplay_events`, checks shairport status          |
+| `airplay_hook.sh`      | Called by shairport hooks; writes `connect`/`disconnect` to FIFO with retries   |
+| `led_controller.py`    | Reads `/tmp/soundmaker_state`, drives GPIO LEDs                                 |
+| `homebridge_bridge.py` | HTTP server (port 8080) for Homebridge; exposes state/volume/playback endpoints |
+| `config.py`            | CLI argument parsing and configuration                                          |
+| `logger_setup.py`      | Logging setup with file rotation                                                |
+| `utils.py`             | Helper functions                                                                |
 
 ---
 
 ## IPC and State Files
 
-| File                             | Purpose                                | Permissions            |
-| -------------------------------- | -------------------------------------- | ---------------------- |
-| `/tmp/soundmaker_airplay_events` | FIFO for AirPlay events                | `prw-rw-rw- root:root` |
-| `/tmp/soundmaker_state`          | Current audio state for LED controller | Written by `player.py` |
+| File                             | Purpose                                | Format / Permissions     |
+| -------------------------------- | -------------------------------------- | ------------------------ |
+| `/tmp/soundmaker_airplay_events` | FIFO for AirPlay events                | `prw-rw-rw- root:root`   |
+| `/tmp/soundmaker_state`          | Current state (mode, volume, playback) | JSON, written by player  |
+| `/tmp/soundmaker_commands`       | Commands from Homebridge               | JSON, consumed by player |
+
+### State File Format
+
+```json
+{ "mode": "streaming", "volume": 100, "playback": "playing" }
+```
+
+| Field      | Values                                          |
+| ---------- | ----------------------------------------------- |
+| `mode`     | `streaming`, `airplay`, `idle`, `transitioning` |
+| `volume`   | 0-100                                           |
+| `playback` | `playing`, `stopped`                            |
+
+### Command File Format
+
+```json
+{"action": "set_volume", "value": 70}
+{"action": "play"}
+{"action": "stop"}
+```
+
+Commands are consumed (file cleared) after processing.
 
 ### FIFO Flow
 
@@ -173,6 +198,20 @@ ExecStartPre=+/bin/bash -c 'mkdir -p /run/user/1000 /run/user/1000/pulse && chow
 - Runs `led_controller.py` as root (GPIO access)
 - Depends on `soundmaker.service`
 - Reads `/tmp/soundmaker_state` to determine LED states
+
+### soundmaker-bridge.service
+
+- Runs `homebridge_bridge.py` as user `goorlavi`
+- HTTP server on `127.0.0.1:8080`
+- Depends on `soundmaker.service`
+- Exposes endpoints for Homebridge plugins
+
+### homebridge.service
+
+- Runs Homebridge (Node.js) as root
+- Listens on port 51826 for HomeKit
+- Config at `/var/lib/homebridge/config.json`
+- Depends on `soundmaker-bridge.service`
 
 ---
 
@@ -278,6 +317,94 @@ python3 /opt/soundmaker/player.py           # Run manually
 
 ---
 
+## Apple Home Integration
+
+### Architecture
+
+```
+┌─────────────┐      ┌─────────────┐      ┌──────────────────┐      ┌─────────────┐
+│  Home App   │ ───► │ Homebridge  │ ───► │ homebridge_bridge│ ───► │  player.py  │
+│  (iPhone)   │      │ (port 51826)│      │   (port 8080)    │      │             │
+└─────────────┘      └─────────────┘      └──────────────────┘      └─────────────┘
+                                                   │                       │
+                                                   ▼                       ▼
+                                          /tmp/soundmaker_         /tmp/soundmaker_
+                                              commands                  state
+```
+
+### HTTP Endpoints (homebridge_bridge.py)
+
+| Method | Path        | Description                         |
+| ------ | ----------- | ----------------------------------- | ------- |
+| GET    | `/state`    | Full state JSON + controllable flag |
+| GET    | `/volume`   | Current volume `{"volume": 100}`    |
+| POST   | `/volume`   | Set volume `{"volume": 70}`         |
+| GET    | `/playback` | Playback status + controllable flag |
+| POST   | `/playback` | Control `{"action": "play           | stop"}` |
+| GET    | `/health`   | Health check                        |
+
+### Homebridge Accessories
+
+| Accessory         | Type      | Function                      |
+| ----------------- | --------- | ----------------------------- |
+| SoundMaker Radio  | Switch    | Play/stop streaming           |
+| SoundMaker Volume | Lightbulb | Volume via brightness (0-100) |
+
+### HomeKit Pairing
+
+- PIN: `031-45-154`
+- Bridge name: `SoundMaker`
+- Port: 51826
+
+---
+
+## Design Decisions
+
+### File-Based IPC vs HTTP API
+
+**Decision**: Use file-based IPC between player.py and external controls.
+
+**Rationale**:
+
+- Keeps HomeKit logic decoupled from audio system
+- player.py remains the single authority for audio control
+- Simpler than adding HTTP server to player.py
+- Lower resource usage on Pi Zero
+
+### Volume via Lightbulb Brightness
+
+**Decision**: Expose volume as a HomeKit lightbulb's brightness slider.
+
+**Rationale**:
+
+- HomeKit has no native "volume" characteristic for generic accessories
+- Lightbulb brightness (0-100%) maps naturally to volume (0-100%)
+- Industry-standard workaround in Homebridge community
+- Reliable and well-supported by plugins
+
+### Controls Not Disabled During AirPlay
+
+**Decision**: HomeKit buttons remain tappable during AirPlay, but commands are ignored.
+
+**Rationale**:
+
+- HomeKit has no server-side mechanism to disable accessory controls
+- Bridge returns 403 error when AirPlay is active
+- Commands are safely ignored by player.py
+- State shows correctly (streaming stopped)
+
+### Streaming-Only Volume Control
+
+**Decision**: HomeKit volume only controls streaming; AirPlay has its own volume.
+
+**Rationale**:
+
+- AirPlay volume is controlled by the source device (iPhone)
+- Mixing two volume controls would be confusing
+- Volume changes via `pactl` only affect PulseAudio sink
+
+---
+
 ## Verification Commands
 
 ### Service Status
@@ -315,3 +442,36 @@ sudo -u goorlavi pactl list sinks short
 1. Connect iPhone to "SoundMaker" in AirPlay menu
 2. Stream should stop, AirPlay audio plays
 3. Disconnect → stream resumes
+
+### Homebridge / Apple Home
+
+```bash
+# Service status
+sudo systemctl status homebridge
+sudo systemctl status soundmaker-bridge
+
+# Homebridge logs
+sudo journalctl -u homebridge -f
+
+# Test HTTP bridge endpoints
+curl http://localhost:8080/state
+curl http://localhost:8080/volume
+curl -X POST -d '{"volume":50}' http://localhost:8080/volume
+curl -X POST -d '{"action":"stop"}' http://localhost:8080/playback
+
+# Check Homebridge config
+cat /var/lib/homebridge/config.json | python3 -m json.tool
+```
+
+### Reset Homebridge Pairing
+
+If Home app shows "No Response" or accessories don't appear:
+
+```bash
+sudo systemctl stop homebridge
+sudo rm -rf /var/lib/homebridge/persist
+sudo rm -rf /var/lib/homebridge/accessories
+sudo systemctl start homebridge
+```
+
+Then remove bridge from Home app and re-pair with PIN `031-45-154`.

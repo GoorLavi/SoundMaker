@@ -8,7 +8,6 @@ import signal
 import sys
 import time
 import logging
-from pathlib import Path
 
 try:
     import RPi.GPIO as GPIO
@@ -39,12 +38,11 @@ except ImportError:
             pass
     GPIO = MockGPIO()
 
+import state_service
+
 # GPIO Pin Configuration (BCM numbering)
 STREAM_LED_PIN = 17  # Physical Pin 11
 AIRPLAY_LED_PIN = 27  # Physical Pin 13
-
-# State file path
-STATE_FILE = Path("/tmp/soundmaker_state")
 
 # Polling interval (seconds)
 POLL_INTERVAL = 0.5
@@ -79,27 +77,12 @@ class LEDController:
     
     def read_state(self):
         """
-        Read current audio state from state file
+        Read current audio mode from state file via state_service
         
         Returns:
-            str: 'streaming', 'airplay', 'idle', or None if file doesn't exist/read fails
+            str: 'streaming', 'airplay', 'idle', 'transitioning', or None
         """
-        try:
-            if not STATE_FILE.exists():
-                return None
-            
-            with open(STATE_FILE, 'r') as f:
-                state = f.read().strip().lower()
-            
-            # Validate state
-            if state in ('streaming', 'airplay', 'idle'):
-                return state
-            else:
-                logger.warning(f"Invalid state in file: {state}")
-                return None
-        except Exception as e:
-            logger.warning(f"Failed to read state file: {e}")
-            return None
+        return state_service.get_mode()
     
     def update_leds(self, state):
         """
@@ -133,7 +116,7 @@ class LEDController:
     def run(self):
         """Main loop: poll state file and update LEDs"""
         logger.info("Starting LED controller main loop...")
-        logger.info(f"Polling state file: {STATE_FILE}")
+        logger.info(f"Polling state file: {state_service.STATE_FILE}")
         logger.info(f"Poll interval: {POLL_INTERVAL} seconds")
         
         last_state = None

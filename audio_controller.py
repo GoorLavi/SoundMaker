@@ -4,6 +4,8 @@ Main coordinator that manages switching between streaming and AirPlay
 """
 
 import logging
+import subprocess
+import os
 from enum import Enum
 
 from stream_player import StreamPlayer
@@ -141,9 +143,78 @@ class AudioController:
         """Get current audio state"""
         return self.state
     
+    def get_volume(self):
+        """Get current volume level (0-100)"""
+        return self.volume
+    
+    def set_volume(self, volume):
+        """
+        Set volume level using PulseAudio (pactl)
+        
+        Args:
+            volume: Volume level 0-100
+            
+        Returns:
+            bool: True if successful
+        """
+        # Clamp volume to valid range
+        volume = max(0, min(100, int(volume)))
+        
+        try:
+            env = os.environ.copy()
+            env['XDG_RUNTIME_DIR'] = '/run/user/1000'
+            
+            # Set PulseAudio sink volume (percentage)
+            result = subprocess.run(
+                ['pactl', 'set-sink-volume', '@DEFAULT_SINK@', f'{volume}%'],
+                env=env,
+                capture_output=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                self.volume = volume
+                logger.info(f"Volume set to {volume}%")
+                return True
+            else:
+                logger.warning(f"pactl failed: {result.stderr.decode()}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to set volume: {e}")
+            return False
+    
+    def get_playback_status(self):
+        """
+        Get current playback status
+        
+        Returns:
+            str: 'playing' if stream is active, 'stopped' otherwise
+        """
+        if self.state == AudioState.STREAMING and self.stream_player.is_playing():
+            return "playing"
+        return "stopped"
+    
+    def get_full_state(self):
+        """
+        Get full state as a dictionary for JSON serialization
+        
+        Returns:
+            dict: State with mode, volume, and playback status
+        """
+        return {
+            "mode": self.state.value,
+            "volume": self.volume,
+            "playback": self.get_playback_status()
+        }
+    
     def is_streaming(self):
         """Check if currently streaming"""
         return self.state == AudioState.STREAMING and self.stream_player.is_playing()
+    
+    def is_controllable(self):
+        """Check if playback/volume can be controlled (not in AirPlay mode)"""
+        return self.state != AudioState.AIRPLAY
     
     def handle_stream_exit(self, return_code):
         """

@@ -1,0 +1,118 @@
+/* Stats row */
+.pihole__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.pihole__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.pihole__stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.pihole__stat-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Actions row */
+.pihole__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Toggle button */
+.pihole__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+
+.pihole__toggle-track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--border);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.pihole__toggle--on .pihole__toggle-track {
+  background: var(--green);
+}
+
+.pihole__toggle--off .pihole__toggle-track {
+  background: #444;
+}
+
+.pihole__toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.pihole__toggle--on .pihole__toggle-thumb {
+  transform: translateX(20px);
+}
+
+.pihole__toggle-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.pihole__toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Admin link */
+.pihole__admin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--accent);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(79, 156, 247, 0.08);
+  transition: background 0.15s;
+}
+
+.pihole__admin-link:hover {
+  background: rgba(79, 156, 247, 0.16);
+  text-decoration: none;
+}
+
+/* Error / loading */
+.pihole__error {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.pihole__loading {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

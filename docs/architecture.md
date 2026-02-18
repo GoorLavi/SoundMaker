@@ -424,26 +424,63 @@ The Master runs `raspotify`, a Debian package wrapping `librespot`. It advertise
 
 ## 13. Pi-hole
 
+### Version
+
+SoundMaker uses **Pi-hole v6**, which replaced the legacy `api.php` + lighttpd stack with a new REST API embedded directly in the `pihole-FTL` binary.
+
 ### Installation
 
-SoundMaker's Master install script installs Pi-hole with sensible defaults:
+The Master install script (`install_master.sh`) performs an **unattended** Pi-hole install:
 
-- Upstream DNS: Cloudflare (1.1.1.1) or Google (8.8.8.8)
-- Standard community blocklists enabled
-- Web admin interface available on its default port
-- All devices on the network should point their DNS to the Master's IP
+1. Creates the `pihole` system user and group.
+2. Places `master/pihole.toml` at `/etc/pihole/pihole.toml` before running the installer — this makes the installer treat it as an upgrade rather than a fresh install, skipping interactive prompts.
+3. Runs `curl -sSL https://install.pi-hole.net | bash /dev/stdin --unattended`.
+4. Updates gravity blocklists with `pihole -g`.
+5. Sets the admin password via `pihole setpassword`.
+
+### Configuration (`master/pihole.toml`)
+
+Only settings that differ from Pi-hole defaults:
+
+| Setting                  | Value                                      | Reason                                              |
+| ------------------------ | ------------------------------------------ | --------------------------------------------------- |
+| `dns.upstreams`          | Cloudflare (1.1.1.1, 1.0.0.1) + Google (8.8.8.8, 8.8.4.4) | Redundant upstream DNS               |
+| `dns.blocking.active`    | `true`                                     | Blocking enabled by default                         |
+| `webserver.port`         | `8080`                                     | Avoids conflict with SoundMaker backend on port 80  |
+
+All devices on the network should point their DNS to the Master's IP.
+
+### Pi-hole v6 REST API
+
+Pi-hole v6 uses **session-based authentication**. The backend (`pihole_api.py`) authenticates by POSTing the password to `/api/auth`, receives a short-lived session ID (SID), and passes it via `X-FTL-SID` header on subsequent requests. Sessions auto-renew on expiry.
+
+| Backend function        | Pi-hole endpoint            | Method | Purpose                          |
+| ----------------------- | --------------------------- | ------ | -------------------------------- |
+| `get_blocking_status()` | `/api/dns/blocking`         | GET    | Check if blocking is enabled     |
+| `set_blocking()`        | `/api/dns/blocking`         | POST   | Enable/disable blocking          |
+| `get_stats_summary()`   | `/api/stats/summary`        | GET    | Queries, blocked count, clients  |
+
+The Pi-hole password is stored in `/opt/soundmaker/.env` (chmod 600) and read via the `PIHOLE_PASSWORD` environment variable.
+
+### SoundMaker API Endpoints
+
+| Method | Endpoint              | Behavior                                                       |
+| ------ | --------------------- | -------------------------------------------------------------- |
+| GET    | `/api/pihole/status`  | Combined blocking state + stats; degrades gracefully if Pi-hole is down |
+| POST   | `/api/pihole/enable`  | Enables ad blocking                                            |
+| POST   | `/api/pihole/disable` | Disables blocking; optional `?timer=N` for temporary disable (seconds) |
 
 ### Web UI Integration
 
 The SoundMaker Web UI exposes basic Pi-hole controls:
 
-| Control               | Implementation                                  |
-| --------------------- | ----------------------------------------------- |
-| Toggle blocking       | Pi-hole API: `enable` / `disable`               |
-| Stats (queries/day)   | Pi-hole API: `summaryRaw`                        |
-| Link to admin UI      | Direct link to Pi-hole's built-in web interface  |
+| Control               | Implementation                                           |
+| --------------------- | -------------------------------------------------------- |
+| Toggle blocking       | `POST /api/pihole/enable` or `POST /api/pihole/disable`  |
+| Stats (queries/day)   | `GET /api/pihole/status`                                  |
+| Link to admin UI      | Direct link to `http://<master>:8080/admin`               |
 
-Pi-hole runs as an independent service. SoundMaker's backend talks to it via Pi-hole's REST API.
+Pi-hole runs as an independent service (`pihole-FTL.service`). SoundMaker's backend talks to it over localhost via the v6 REST API.
 
 ---
 
@@ -463,7 +500,7 @@ SoundMaker/
 │   │   ├── spotify_monitor.py   # raspotify event monitoring
 │   │   ├── bluetooth_manager.py # BlueZ D-Bus control
 │   │   ├── snapcast_api.py      # Snapcast JSON-RPC client
-│   │   ├── pihole_api.py        # Pi-hole REST API client
+│   │   ├── pihole_api.py        # Pi-hole v6 REST API client
 │   │   ├── state_manager.py     # JSON state persistence
 │   │   └── requirements.txt     # Python dependencies
 │   │
@@ -473,6 +510,7 @@ SoundMaker/
 │   │   ├── package.json
 │   │   └── dist/                # Built static files (committed to repo)
 │   │
+│   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
 ├── slave/
@@ -498,8 +536,10 @@ Managed by `.gitignore`:
 
 - `node_modules/` — installed locally for development, never on the Pi
 - `__pycache__/` — Python bytecode
+- `.venv/` — Python virtual environment (created on device by install script)
 - `state/*.json` — runtime state files (slaves, config, bluetooth)
-- Secrets — WiFi credentials, Spotify config, any API keys
+- `.env` — runtime environment config (Pi-hole password, paths)
+- `.DS_Store` — macOS metadata
 
 ---
 
@@ -535,8 +575,10 @@ cd /opt
 sudo git clone <repo-url> soundmaker
 sudo chown -R goorlavi:goorlavi /opt/soundmaker
 cd /opt/soundmaker/master
-sudo ./install_master.sh
+sudo PIHOLE_PW=yourpassword ./install_master.sh
 ```
+
+The install script handles: system packages, Pi-hole (unattended), Python venv, backend dependencies, environment config (`/opt/soundmaker/.env`), and the `soundmaker-backend.service` systemd unit.
 
 Subsequent updates:
 
@@ -617,7 +659,7 @@ It SSHes into the target device, runs `git pull`, and optionally re-runs the ins
 | Same local network             | Master and all Slaves on the same WiFi/LAN       |
 | 2.4GHz WiFi available          | Pi Zero 2 W only supports 2.4GHz                 |
 | mDNS / Avahi                   | For `soundmaker-master.local` hostname resolution |
-| Open TCP ports on Master       | 1704 (Snapcast audio), 1705 (Snapcast control), 80 (Web UI), 53 (Pi-hole DNS) |
+| Open TCP ports on Master       | 1704 (Snapcast audio), 1705 (Snapcast control), 80 (Web UI), 8080 (Pi-hole admin), 53 (Pi-hole DNS) |
 | Stable internet on Master      | For radio streaming, Spotify, Pi-hole updates     |
 
 ---

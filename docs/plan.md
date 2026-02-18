@@ -1,0 +1,210 @@
+# SoundMaker — Implementation Plan
+
+Tracks what's done, what's in progress, and what's next. Each phase builds on the previous one. Frontend work is embedded in each phase alongside its backend.
+
+---
+
+## Phase 0: Project Scaffolding
+> **Status: DONE**
+
+- [x] Create `master/backend/` directory structure
+- [x] Create `requirements.txt` (fastapi, uvicorn, httpx)
+- [x] Create `state_manager.py` — JSON state persistence with atomic writes
+- [x] Create `main.py` — FastAPI entry point with `/api/health` and `/api/config`
+- [x] Create `.gitignore` (node_modules, pycache, .venv, state/*.json, .env, .DS_Store)
+- [x] Verify backend runs locally on macOS
+
+---
+
+## Phase 1: Pi-hole
+> **Status: DONE**
+
+- [x] Research Pi-hole v6 API (session-based auth, new REST endpoints)
+- [x] Create `master/pihole.toml` — config template (Cloudflare + Google DNS, port 8080)
+- [x] Create `pihole_api.py` — async Pi-hole v6 client with session auth and auto-renewal
+- [x] Add Pi-hole endpoints to `main.py` (`/api/pihole/status`, `enable`, `disable`)
+- [x] Graceful degradation when Pi-hole is unreachable
+- [x] Create `master/install_master.sh` — unattended Pi-hole install, venv setup, systemd service
+- [x] Fix port 80 permission issue (`AmbientCapabilities=CAP_NET_BIND_SERVICE`)
+- [x] Deploy and verify on Raspberry Pi 5
+- [x] Update `architecture.md` with actual v6 implementation details
+- [x] Create `README.md`
+
+---
+
+## Phase 2: Web UI Scaffolding + Pi-hole UI
+> **Status: DONE**
+
+### Frontend setup
+- [x] Create React app in `master/frontend/` (Vite + React, minimal dependencies)
+- [x] Mobile-first responsive layout with a clean dashboard shell
+- [x] Build to `dist/`, commit to repo (no Node.js needed on Pi)
+- [x] FastAPI serves `dist/` as static files (already wired in `main.py`)
+
+### Pi-hole section (first UI feature)
+- [x] Blocking toggle (on/off)
+- [x] Stats: queries today, blocked today, percentage
+- [x] Link to Pi-hole admin UI (`http://<master>:8080/admin`)
+
+### Deploy & verify
+- [ ] Build on macOS, push, pull on Pi
+- [ ] Verify Web UI loads at `http://soundmaker-master.local/`
+
+---
+
+## Phase 3: PulseAudio + Snapcast
+> **Status: TODO**
+
+### Master (Pi 5)
+- [ ] Install PulseAudio on Master
+- [ ] Configure pipe sink: `module-pipe-sink` writing to `/tmp/snapfifo` (s16le, 48000Hz)
+- [ ] Set Snapcast as the default PulseAudio sink
+- [ ] Install `snapserver` on Master
+- [ ] Configure `snapserver` to read from `/tmp/snapfifo`
+- [ ] Add PulseAudio + Snapcast to `install_master.sh`
+- [ ] Verify Snapcast Server starts and listens on ports 1704/1705
+
+### Slave (Pi Zero 2 W)
+- [ ] Create `slave/install_slave.sh`
+- [ ] Install `snapclient` on Slave
+- [ ] Configure `snapclient` to connect to `soundmaker-master.local:1704`
+- [ ] Configure ALSA/PulseAudio to output to USB DAC
+- [ ] systemd service for snapclient
+- [ ] Verify Slave auto-connects to Master
+
+### End-to-end test
+- [ ] Play a test audio file on Master through PulseAudio
+- [ ] Confirm audio comes out of the Slave's speaker
+- [ ] Confirm Snapcast Server reports the connected client
+
+---
+
+## Phase 4: Snapcast API + Room Management
+> **Status: TODO**
+
+### Backend
+- [ ] Create `snapcast_api.py` — JSON-RPC client for Snapcast Server (port 1705)
+- [ ] Implement: list clients, get status, set volume, mute/unmute
+- [ ] Add API endpoints:
+  - [ ] `GET /api/rooms` — list all Slaves with name, volume, muted, online status
+  - [ ] `PUT /api/rooms/{id}/volume` — set volume (0–100)
+  - [ ] `PUT /api/rooms/{id}/mute` — toggle mute
+  - [ ] `PUT /api/rooms/{id}/name` — rename a Slave
+- [ ] Detect new (unnamed) Slaves from Snapcast's `Server.GetStatus`
+- [ ] Persist Slave names in `state/slaves.json`
+
+### Frontend — Room Management section
+- [ ] List all Slaves: name, online/offline status, volume slider, on/off toggle
+- [ ] Unnamed Slaves appear at bottom for naming
+- [ ] Real-time volume and mute control
+
+### Test
+- [ ] Control volume and mute from API and UI, verify audio changes on Slave
+- [ ] Add a new Slave, confirm it appears unnamed in the UI, name it
+
+---
+
+## Phase 5: Internet Radio (mpv)
+> **Status: TODO**
+
+### Backend
+- [ ] Install `mpv` on Master
+- [ ] Create `radio_player.py` — manage `mpv` process (start, stop, restart with exponential backoff)
+- [ ] Radio auto-starts on system boot (default source)
+- [ ] Add API endpoints: `POST /api/radio/play`, `POST /api/radio/stop`, `GET /api/radio/status`
+- [ ] Add stream URL endpoint: `PUT /api/config` to update `default_stream_url`
+- [ ] Persist stream URL in `state/config.json`
+- [ ] Add mpv install to `install_master.sh`
+
+### Frontend — Dashboard source section
+- [ ] Current source indicator (Radio / Spotify / Bluetooth) with visual distinction
+- [ ] Play/stop button for radio
+- [ ] Stream URL display and edit
+
+### Test
+- [ ] Radio plays through PulseAudio → Snapcast → Slave speaker
+- [ ] Play/stop from the Web UI works
+- [ ] Changing stream URL persists and takes effect
+
+---
+
+## Phase 6: Spotify Connect
+> **Status: TODO**
+
+### Backend
+- [ ] Install `raspotify` (librespot) on Master
+- [ ] Configure raspotify to output to PulseAudio
+- [ ] Create `spotify_monitor.py` — monitor raspotify event hooks (play, stop, disconnect)
+- [ ] Add Spotify install to `install_master.sh`
+- [ ] Add API endpoint: `GET /api/source` — returns current active source
+
+### Frontend
+- [ ] Source indicator updates to "Spotify" when active
+- [ ] Play/stop button disabled when Spotify is active
+
+### Test
+- [ ] Select "SoundMaker" from Spotify on phone, audio plays through all Slaves
+- [ ] UI reflects Spotify as active source
+
+---
+
+## Phase 7: Bluetooth A2DP
+> **Status: TODO**
+
+### Backend
+- [ ] Configure BlueZ as A2DP sink on Master
+- [ ] Create `bluetooth_manager.py` — D-Bus control for BlueZ
+  - [ ] Make Master discoverable (60s timeout)
+  - [ ] Accept pairing automatically
+  - [ ] Monitor connect/disconnect events
+- [ ] Route Bluetooth audio through PulseAudio
+- [ ] Persist paired devices in `state/bluetooth.json`
+- [ ] Add API endpoints:
+  - [ ] `POST /api/bluetooth/discover` — start 60s discoverable mode
+  - [ ] `GET /api/bluetooth/devices` — list paired devices
+  - [ ] `GET /api/bluetooth/status` — discoverable state, active connection
+- [ ] Add BlueZ config to `install_master.sh`
+
+### Frontend — Bluetooth section
+- [ ] "Pair New Device" button with 60s countdown
+- [ ] Paired devices list
+- [ ] Source indicator updates to "Bluetooth" when active
+- [ ] Play/stop button disabled when Bluetooth is active
+
+### Test
+- [ ] Pair phone, play audio, verify it comes out all Slaves
+- [ ] UI reflects Bluetooth as active source
+
+---
+
+## Phase 8: Audio Source Manager
+> **Status: TODO**
+
+### Backend
+- [ ] Create `audio_manager.py` — priority-based source switching
+- [ ] Implement priority rules:
+  - [ ] Spotify (1) overrides Bluetooth (2) overrides Radio (3)
+  - [ ] On disconnect, cascade down to next available source
+  - [ ] Radio resumes automatically when all higher sources disconnect
+- [ ] Wire together: `spotify_monitor.py`, `bluetooth_manager.py`, `radio_player.py`
+- [ ] Update `GET /api/source` to reflect real-time active source
+
+### Frontend
+- [ ] Source indicator and play/stop button respond correctly to all transitions
+
+### Test
+- [ ] Full priority chain: radio playing → connect BT (radio stops) → connect Spotify (BT stops) → disconnect Spotify (BT resumes) → disconnect BT (radio resumes)
+- [ ] UI updates in real time through all transitions
+
+---
+
+## Phase 9: Deploy Script + Polish
+> **Status: TODO**
+
+- [ ] Create `deploy.sh` — SSH-based convenience script from dev machine
+  - [ ] `./deploy.sh master` — git pull + optional install on Master
+  - [ ] `./deploy.sh slave <hostname>` — git pull + optional install on Slave
+- [ ] Verify all systemd services restart correctly on reboot
+- [ ] Test failure scenarios (Slave disconnect, Master reboot, mpv crash, etc.)
+- [ ] Final end-to-end walkthrough of all features
+- [ ] Update `architecture.md` and `README.md` with final state

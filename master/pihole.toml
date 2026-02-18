@@ -1,0 +1,20 @@
+# SoundMaker — Pi-hole v6 configuration template
+#
+# This is the MINIMAL config placed at /etc/pihole/pihole.toml before
+# the unattended installer runs.  Only settings that differ from
+# Pi-hole defaults are listed here.
+
+[dns]
+  upstreams = ["1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4"]
+  queryLogging = true
+  listeningMode = "LOCAL"
+
+  [dns.blocking]
+    active = true
+    mode = "NULL"
+
+[webserver]
+  port = "8080"
+
+  [webserver.api]
+    prettyJSON = false

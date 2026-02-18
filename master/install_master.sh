@@ -148,6 +148,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$run_user
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 WorkingDirectory=$backend_dir
 EnvironmentFile=$ENV_FILE
 ExecStart=$backend_dir/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 80

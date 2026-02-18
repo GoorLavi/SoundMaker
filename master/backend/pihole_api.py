@@ -117,7 +117,7 @@ async def get_status() -> dict:
         blocking, summary = await get_blocking_status(), await get_stats_summary()
         return {
             "available": True,
-            "blocking": blocking.get("blocking", "unknown"),
+            "blocking": blocking.get("blocking") == "enabled",
             **summary,
         }
     except Exception as exc:

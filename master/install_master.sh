@@ -150,7 +150,7 @@ setup_backend() {
 
     info "Hashing SoundMaker Web UI password..."
     local sm_pw_hash
-    sm_pw_hash=$(echo -n "$sm_pw" | "$backend_dir/.venv/bin/python3" -c "import sys; from passlib.hash import bcrypt; print(bcrypt.using(rounds=12).hash(sys.stdin.read()))")
+    sm_pw_hash=$(echo -n "$sm_pw" | "$backend_dir/.venv/bin/python3" -c "import sys, bcrypt; print(bcrypt.hashpw(sys.stdin.read().encode(), bcrypt.gensalt(rounds=12)).decode())")
 
     info "Writing environment config to $ENV_FILE ..."
     cat > "$ENV_FILE" <<ENVEOF

@@ -11,9 +11,8 @@ import time
 from collections import defaultdict
 from typing import Optional
 
+import bcrypt as _bcrypt
 from fastapi import Cookie, HTTPException
-
-from passlib.hash import bcrypt
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -36,11 +35,11 @@ _login_attempts: dict[str, list[float]] = defaultdict(list)  # ip -> [timestamps
 
 
 def hash_password(plain: str) -> str:
-    return bcrypt.using(rounds=12).hash(plain)
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=12)).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.verify(plain, hashed)
+    return _bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 def get_password_hash() -> Optional[str]:

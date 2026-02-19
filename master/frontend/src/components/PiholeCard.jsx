@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../api";
 import "./PiholeCard.css";
 
 const POLL_INTERVAL = 10_000;
@@ -11,7 +12,7 @@ export default function PiholeCard() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/pihole/status");
+      const res = await apiFetch("/api/pihole/status");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setStatus(data);
@@ -34,7 +35,7 @@ export default function PiholeCard() {
       const endpoint = status.blocking === true
         ? "/api/pihole/disable"
         : "/api/pihole/enable";
-      const res = await fetch(endpoint, { method: "POST" });
+      const res = await apiFetch(endpoint, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await fetchStatus();
     } catch {

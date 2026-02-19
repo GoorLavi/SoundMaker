@@ -46,9 +46,43 @@ Tracks what's done, what's in progress, and what's next. Each phase builds on th
 - [x] Stats: queries today, blocked today, percentage
 - [x] Link to Pi-hole admin UI (`http://<master>:8080/admin`)
 
+### Bug fix
+- [x] Pi-hole v6 returns `"enabled"`/`"disabled"` strings, not booleans — normalize to `true`/`false` in `pihole_api.py`
+
 ### Deploy & verify
-- [ ] Build on macOS, push, pull on Pi
-- [ ] Verify Web UI loads at `http://soundmaker-master.local/`
+- [x] Build on macOS, push, pull on Pi
+- [x] Verify Web UI loads at `http://master.local/`
+- [x] Verify Pi-hole toggle works (enable/disable blocking)
+- [x] Verify Pi-hole stats display correctly
+
+---
+
+## Phase 2.5: Remote Access & Security
+> **Status: DONE**
+
+### Backend authentication
+- [x] Create `auth.py` — bcrypt password hashing, in-memory session store, `require_auth` FastAPI dependency
+- [x] Add login rate limiting (5 attempts/min per IP)
+- [x] Add auth endpoints to `main.py` (`/api/auth/login`, `/api/auth/logout`, `/api/auth/check`)
+- [x] Protect existing API routes with `Depends(require_auth)`
+- [x] Add `passlib[bcrypt]` and `python-multipart` to `requirements.txt`
+
+### Frontend authentication
+- [x] Create shared `api.js` fetch wrapper with 401 handling
+- [x] Create `LoginScreen` component (password form, dark theme)
+- [x] Add auth state to `App.jsx` (auth check on mount, conditional render, logout button)
+- [x] Update `PiholeCard.jsx` to use `apiFetch`
+
+### Tailscale VPN
+- [x] Add Tailscale install section to `install_master.sh`
+- [x] Add `SOUNDMAKER_PW` password hashing to install script
+- [ ] Install Tailscale on Master Pi and authenticate (`sudo tailscale up --ssh`)
+- [ ] Install Tailscale app on phone and verify remote Web UI access
+
+### Documentation
+- [x] Update `architecture.md` — new sections 19 (Authentication) and 20 (Remote Access), updated Security table
+- [x] Update `plan.md` — add Phase 2.5
+- [x] Update `README.md` — remote access instructions
 
 ---
 

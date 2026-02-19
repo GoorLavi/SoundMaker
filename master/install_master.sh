@@ -6,8 +6,8 @@
 # Must be run as root.  Safe to re-run (idempotent).
 #
 # Usage:
-#   sudo ./install_master.sh              # interactive (prompts for Pi-hole password)
-#   sudo PIHOLE_PW=secret ./install_master.sh   # non-interactive
+#   sudo ./install_master.sh              # interactive (prompts for passwords)
+#   sudo PIHOLE_PW=secret SOUNDMAKER_PW=secret ./install_master.sh   # non-interactive
 
 set -euo pipefail
 
@@ -51,7 +51,32 @@ apt-get update -qq
 apt-get install -y -qq python3 python3-venv curl git > /dev/null
 
 # ---------------------------------------------------------------------------
-# 2. Pi-hole
+# 2. Tailscale VPN
+# ---------------------------------------------------------------------------
+
+install_tailscale() {
+    if command -v tailscale &> /dev/null; then
+        info "Tailscale is already installed, skipping."
+    else
+        info "Installing Tailscale..."
+        curl -fsSL https://tailscale.com/install.sh | sh
+    fi
+
+    systemctl enable tailscaled
+    systemctl start tailscaled
+
+    if ! tailscale status &> /dev/null; then
+        warn "Tailscale installed but not authenticated."
+        warn "After installation completes, run:  sudo tailscale up --ssh"
+    else
+        info "Tailscale is running."
+    fi
+}
+
+install_tailscale
+
+# ---------------------------------------------------------------------------
+# 3. Pi-hole
 # ---------------------------------------------------------------------------
 
 install_pihole() {
@@ -101,7 +126,7 @@ install_pihole() {
 install_pihole
 
 # ---------------------------------------------------------------------------
-# 3. Python backend
+# 4. Python backend
 # ---------------------------------------------------------------------------
 
 setup_backend() {
@@ -112,13 +137,27 @@ setup_backend() {
     "$backend_dir/.venv/bin/pip" install --quiet --upgrade pip
     "$backend_dir/.venv/bin/pip" install --quiet -r "$backend_dir/requirements.txt"
 
-    # Write the env file that the systemd service will load.
-    # The Pi-hole password is needed so the backend can authenticate to the Pi-hole API.
+    # Hash the SoundMaker Web UI password
+    local sm_pw="${SOUNDMAKER_PW:-}"
+    if [[ -z "$sm_pw" ]]; then
+        read -rsp "[SoundMaker] Set a password for the Web UI: " sm_pw
+        echo
+        if [[ -z "$sm_pw" ]]; then
+            error "Web UI password cannot be empty."
+            exit 1
+        fi
+    fi
+
+    info "Hashing SoundMaker Web UI password..."
+    local sm_pw_hash
+    sm_pw_hash=$(echo -n "$sm_pw" | "$backend_dir/.venv/bin/python3" -c "import sys; from passlib.hash import bcrypt; print(bcrypt.using(rounds=12).hash(sys.stdin.read()))")
+
     info "Writing environment config to $ENV_FILE ..."
     cat > "$ENV_FILE" <<ENVEOF
 SOUNDMAKER_STATE_DIR=$STATE_DIR
 PIHOLE_BASE_URL=http://localhost:8080
 PIHOLE_PASSWORD=${PIHOLE_PW:-changeme}
+SOUNDMAKER_PASSWORD_HASH=$sm_pw_hash
 ENVEOF
     chmod 600 "$ENV_FILE"
     chown "${SUDO_USER:-pi}:${SUDO_USER:-pi}" "$ENV_FILE"
@@ -129,7 +168,7 @@ ENVEOF
 setup_backend
 
 # ---------------------------------------------------------------------------
-# 4. systemd service for the SoundMaker backend
+# 5. systemd service for the SoundMaker backend
 # ---------------------------------------------------------------------------
 
 install_service() {
@@ -178,4 +217,8 @@ info ""
 info " Web UI:        http://$(hostname).local"
 info " Pi-hole admin: http://$(hostname).local:8080/admin"
 info " Backend API:   http://$(hostname).local/api/health"
+info ""
+info " Remote access (Tailscale):"
+info "   Run:  sudo tailscale up --ssh"
+info "   Then access the UI from anywhere via Tailscale."
 info "============================================"

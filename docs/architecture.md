@@ -240,7 +240,11 @@ network-online
 
 ### Technology
 
-Lightweight React SPA, mobile-first. Built to static files and served by the FastAPI backend. No SSR, no heavy framework — just React with minimal dependencies.
+Lightweight React 19 SPA with Vite, mobile-first dark theme. Built to static files on the dev machine (macOS) and committed to the repo as `master/frontend/dist/`. Served by the FastAPI backend. No SSR, no heavy framework, no Node.js on the Pi.
+
+Dependencies: `react`, `react-dom`, `vite`, `@vitejs/plugin-react` — nothing else.
+
+During development, `npm run dev` runs Vite's dev server with a proxy to the backend (`/api` → `localhost:8000`).
 
 ### Screens and Controls
 
@@ -265,11 +269,14 @@ Lightweight React SPA, mobile-first. Built to static files and served by the Fas
 - **Paired devices list** — shows previously paired devices
 - **One active Bluetooth audio connection at a time**
 
-#### Pi-hole
+#### Pi-hole (implemented)
 
-- **Toggle blocking on/off**
-- **Basic stats** — queries today, queries blocked, percentage blocked
-- **Link to Pi-hole admin UI** — for advanced configuration
+- **Status badge** — "active" (green) or "disabled" (red) based on blocking state
+- **Stats row** — queries today, blocked count, blocked percentage
+- **Toggle switch** — enables/disables blocking via `POST /api/pihole/enable` or `/disable`
+- **Admin link** — opens Pi-hole admin UI at `http://<master>:8080/admin` in a new tab
+- **Polling** — refreshes status every 10 seconds
+- **Graceful degradation** — shows "unavailable" when Pi-hole or backend is unreachable
 
 ---
 
@@ -280,6 +287,7 @@ Lightweight React SPA, mobile-first. Built to static files and served by the Fas
 | Master → Slaves (audio)       | Snapcast TCP stream      | 1704  | Synced PCM audio distribution        |
 | Master ↔ Slaves (control)     | Snapcast JSON-RPC        | 1705  | Volume, mute, client status          |
 | Browser → Master (UI)         | HTTP                     | 80    | React SPA + FastAPI REST API         |
+| Remote device → Master (VPN)  | Tailscale (WireGuard)    | —     | Encrypted tunnel for remote access   |
 | Phone → Master (Spotify)      | Spotify Connect (WiFi)   | —     | Handled by raspotify/librespot       |
 | Phone → Master (Bluetooth)    | Bluetooth A2DP           | —     | Handled by BlueZ                     |
 | Network → Master (DNS)        | DNS                      | 53    | Pi-hole ad-blocking                  |
@@ -460,6 +468,8 @@ Pi-hole v6 uses **session-based authentication**. The backend (`pihole_api.py`) 
 | `set_blocking()`        | `/api/dns/blocking`         | POST   | Enable/disable blocking          |
 | `get_stats_summary()`   | `/api/stats/summary`        | GET    | Queries, blocked count, clients  |
 
+**Note:** Pi-hole v6's GET `/api/dns/blocking` returns `"enabled"` / `"disabled"` as strings, not booleans. The `get_status()` function normalizes this to `true` / `false` before sending it to the frontend.
+
 The Pi-hole password is stored in `/opt/soundmaker/.env` (chmod 600) and read via the `PIHOLE_PASSWORD` environment variable.
 
 ### SoundMaker API Endpoints
@@ -495,6 +505,7 @@ SoundMaker/
 ├── master/
 │   ├── backend/                 # Python FastAPI backend
 │   │   ├── main.py              # Entry point, FastAPI app
+│   │   ├── auth.py              # Authentication, sessions, rate limiting
 │   │   ├── audio_manager.py     # Source switching, priority logic
 │   │   ├── radio_player.py      # mpv process management
 │   │   ├── spotify_monitor.py   # raspotify event monitoring
@@ -504,9 +515,16 @@ SoundMaker/
 │   │   ├── state_manager.py     # JSON state persistence
 │   │   └── requirements.txt     # Python dependencies
 │   │
-│   ├── frontend/                # React Web UI (source)
+│   ├── frontend/                # React Web UI (Vite + React 19)
 │   │   ├── src/
-│   │   ├── public/
+│   │   │   ├── main.jsx         # React entry point
+│   │   │   ├── App.jsx          # Dashboard shell + auth state
+│   │   │   ├── api.js           # Shared fetch wrapper (401 handling)
+│   │   │   └── components/
+│   │   │       ├── LoginScreen.jsx  # Login form
+│   │   │       └── PiholeCard.jsx
+│   │   ├── index.html
+│   │   ├── vite.config.js
 │   │   ├── package.json
 │   │   └── dist/                # Built static files (committed to repo)
 │   │
@@ -668,18 +686,90 @@ It SSHes into the target device, runs `git pull`, and optionally re-runs the ins
 
 | Aspect                    | Approach                                                    |
 | ------------------------- | ----------------------------------------------------------- |
+| Web UI authentication     | Password-based login with bcrypt-hashed password, HTTP-only session cookies (7-day TTL) |
+| Login rate limiting       | Max 5 attempts per minute per IP — prevents brute-force     |
+| Remote access             | Tailscale VPN (WireGuard) — encrypted tunnel, no open ports |
 | Snapcast traffic          | Unencrypted PCM on local network — acceptable for home use  |
-| Web UI                    | HTTP on local network, no auth (home network trust model)   |
 | Bluetooth pairing         | Discoverable only when triggered from UI, 60s timeout       |
 | Spotify Connect           | Secured by Spotify's own authentication                     |
 | Pi-hole admin             | Pi-hole's built-in web password                             |
-| SSH                       | Standard key-based SSH for device management                |
+| SSH                       | Key-based SSH locally; Tailscale SSH for remote access      |
+| Credentials storage       | Password hash and secrets in `/opt/soundmaker/.env` (chmod 600) |
 
-The system assumes a trusted home network. It is not designed for public or shared networks.
+The Web UI requires authentication. Remote access is provided via Tailscale VPN, which encrypts all traffic with WireGuard. No ports are exposed to the public internet.
 
 ---
 
-## 19. Future Possibilities (Out of Scope Now)
+## 19. Authentication
+
+### How It Works
+
+The SoundMaker Web UI and all API endpoints (except `/api/health`) require authentication. The backend uses a single shared password, hashed with bcrypt and stored in the `.env` file.
+
+### Login Flow
+
+1. User opens the Web UI and sees a login screen.
+2. User enters the password. Frontend sends `POST /api/auth/login` with the password.
+3. Backend verifies against `SOUNDMAKER_PASSWORD_HASH` (bcrypt).
+4. On success, backend creates a session token and sets an HTTP-only `session` cookie (7-day TTL).
+5. Subsequent API requests include the cookie. The `require_auth` dependency validates it.
+6. On logout, `POST /api/auth/logout` revokes the session and clears the cookie.
+
+### Session Storage
+
+Sessions are stored in-memory on the backend. On service restart, all sessions are invalidated and users must log in again. This is acceptable for a single-user home system.
+
+### Rate Limiting
+
+The login endpoint limits to 5 attempts per minute per IP address. Excess attempts receive HTTP 429.
+
+### Password Setup
+
+The password is set during `install_master.sh` (via `SOUNDMAKER_PW` env var or interactive prompt). The script hashes it with bcrypt (12 rounds) and writes the hash to `/opt/soundmaker/.env`.
+
+---
+
+## 20. Remote Access (Tailscale VPN)
+
+### Why Tailscale
+
+Tailscale provides a zero-config WireGuard mesh VPN. It requires no port forwarding, no static IP, and no DDNS. It installs as a single package and runs as a systemd service.
+
+### How It Works
+
+1. `tailscaled` runs on the Master as a systemd service.
+2. The Master joins a private Tailscale network (tailnet) and receives a stable `100.x.x.x` IP.
+3. Client devices (phone, laptop) run the Tailscale app and join the same tailnet.
+4. All traffic between devices is encrypted with WireGuard (peer-to-peer when possible, relayed otherwise).
+5. The Web UI is accessible at `http://<tailscale-hostname>/` from anywhere.
+
+### What's Accessible Remotely
+
+| Service          | URL via Tailscale                                    | Notes                        |
+| ---------------- | ---------------------------------------------------- | ---------------------------- |
+| Web UI           | `http://soundmaker-master.tailnet-name.ts.net/`      | Requires login               |
+| Pi-hole admin    | `http://soundmaker-master.tailnet-name.ts.net:8080/admin` | Pi-hole's own password  |
+| SSH              | `ssh` via Tailscale (if `--ssh` flag used)           | No port forwarding needed    |
+| Backend API      | `http://soundmaker-master.tailnet-name.ts.net/api/*` | Requires session cookie      |
+
+### What Does NOT Work Remotely
+
+- **Spotify Connect** — requires local network presence for device discovery
+- **Bluetooth** — requires physical proximity
+
+### Setup
+
+Tailscale is installed by `install_master.sh`. After installation, authenticate once:
+
+```bash
+sudo tailscale up --ssh
+```
+
+Then install the Tailscale app on your phone/laptop and sign in with the same account.
+
+---
+
+## 21. Future Possibilities (Out of Scope Now)
 
 These are not planned but the architecture supports them:
 

@@ -120,7 +120,7 @@ After installation, the Master exposes:
 | Web UI | `http://master.local/` | Mobile-first dashboard (dark theme) |
 | Backend API | `http://master.local/api/health` | REST API |
 | Pi-hole Admin | `http://master.local:8080/admin` | Ad-blocking management |
-| Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |
+| Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |  
 
 ## API Endpoints
 

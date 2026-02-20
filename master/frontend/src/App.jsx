@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { setOnAuthLost } from "./api";
 import PiholeCard from "./components/PiholeCard";
+import SystemHealthCard from "./components/SystemHealthCard";
 import UpdatesCard from "./components/UpdatesCard";
 import LoginScreen from "./components/LoginScreen";
 import "./App.css";
 
+const TAB_DASHBOARD = "dashboard";
+const TAB_SYSTEM = "system";
+
 export default function App() {
   const [authState, setAuthState] = useState("loading"); // "loading" | "authenticated" | "unauthenticated"
+  const [activeTab, setActiveTab] = useState(TAB_DASHBOARD);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -38,9 +43,32 @@ export default function App() {
           Log out
         </button>
       </header>
+      <nav className="tabs" role="tablist" aria-label="Main sections">
+        <button
+          role="tab"
+          aria-selected={activeTab === TAB_DASHBOARD}
+          className={`tabs__tab ${activeTab === TAB_DASHBOARD ? "tabs__tab--active" : ""}`}
+          onClick={() => setActiveTab(TAB_DASHBOARD)}
+        >
+          Dashboard
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === TAB_SYSTEM}
+          className={`tabs__tab ${activeTab === TAB_SYSTEM ? "tabs__tab--active" : ""}`}
+          onClick={() => setActiveTab(TAB_SYSTEM)}
+        >
+          System
+        </button>
+      </nav>
       <main className="dashboard">
-        <PiholeCard />
-        <UpdatesCard />
+        {activeTab === TAB_DASHBOARD && <PiholeCard />}
+        {activeTab === TAB_SYSTEM && (
+          <>
+            <SystemHealthCard />
+            <UpdatesCard />
+          </>
+        )}
       </main>
     </div>
   );

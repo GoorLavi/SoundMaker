@@ -87,6 +87,45 @@ Tracks what's done, what's in progress, and what's next. Each phase builds on th
 
 ---
 
+## Phase 2.6: Manual Self-Update + Versioned Migrations
+> **Status: DONE**
+
+### Backend
+- [x] Create `update_manager.py` — version from git, check remote (git fetch + compare), apply (lock, git pull, pip install, migrations)
+- [x] State: `version.json` (current, last_updated_at), `applied_migrations.json`, `update.lock`
+- [x] Migrations: `master/migrations/*.sh` run in order, recorded in `applied_migrations.json`; env `SOUNDMAKER_STATE_DIR`, `SOUNDMAKER_REPO`
+- [x] Add `master/migrations/001_initial.sh` (no-op)
+- [x] API: `GET /api/updates/status`, `POST /api/updates/check`, `POST /api/updates/apply`, `GET /api/updates/progress`
+
+### Frontend
+- [x] Create `UpdatesCard.jsx` — System → Updates: current version, last update, Check for updates, Apply update (when available), progress log, success/failure
+
+### Documentation
+- [x] `architecture.md` — §16 Updates and Migrations (how updates work, Web UI, API, versioning, migrations, adding migrations, Web UI vs SSH, safety)
+- [x] `architecture.md` — state (version.json, applied_migrations.json, update.lock), project structure (update_manager, migrations/, UpdatesCard)
+- [x] `plan.md` — Phase 2.6
+
+---
+
+## Phase 2.7: System tab (Master health dashboard)
+> **Status: DONE**
+
+### Backend
+- [x] Create `system_info.py` — read-only gathering of CPU (model, frequency, load), memory, temperature, storage, network (interface, IP, Wi-Fi SSID/signal, internet), OS (version, uptime, hostname), application (version, last update)
+- [x] Add `GET /api/system/info` (protected) returning structured JSON
+- [x] Temperature warning threshold (70 °C); graceful degradation on non-Linux (e.g. macOS dev)
+
+### Frontend
+- [x] Add top-level tabs: **Dashboard** (Pi-hole), **System** (System Health + Updates)
+- [x] Create `SystemHealthCard.jsx` — card-based sections (CPU, Memory, Temperature, Storage, Network, System, Application)
+- [x] Mobile-first layout; status indicators (OK / warning / problem) for temperature and internet
+- [x] Poll system info every 20 seconds; move Updates card under System tab and retitle to "Updates"
+
+### Documentation
+- [x] `architecture.md` — Navigation, System tab, System Health card, GET `/api/system/info`, project structure (system_info.py, SystemHealthCard.jsx)
+
+---
+
 ## Phase 3: PulseAudio + Snapcast
 > **Status: TODO**
 

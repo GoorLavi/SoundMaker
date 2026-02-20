@@ -26,6 +26,7 @@ from auth import (
     verify_password,
 )
 from state_manager import STATE_DIR, load
+from system_info import get_system_info
 from update_manager import (
     check_for_updates,
     get_current_version,
@@ -139,6 +140,16 @@ async def pihole_disable(timer: Optional[int] = None):
     except Exception as exc:
         logger.warning("Pi-hole disable failed: %s", exc)
         return JSONResponse({"error": "Pi-hole unreachable"}, status_code=502)
+
+
+# ---------------------------------------------------------------------------
+# System info (protected, read-only dashboard)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/system/info", dependencies=[Depends(require_auth)])
+def system_info():
+    """Master device system information for the System tab (CPU, memory, temp, storage, network, OS, app)."""
+    return get_system_info()
 
 
 # ---------------------------------------------------------------------------

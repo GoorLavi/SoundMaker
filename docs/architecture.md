@@ -269,14 +269,40 @@ During development, `npm run dev` runs Vite's dev server with a proxy to the bac
 - **Paired devices list** — shows previously paired devices
 - **One active Bluetooth audio connection at a time**
 
+#### Navigation (implemented)
+
+- **Top-level tabs** — **Dashboard** (Pi-hole and future audio/room controls) and **System** (System Health + Updates). Mobile-first tab bar below the header.
+
 #### Pi-hole (implemented)
 
+- Shown on the **Dashboard** tab.
 - **Status badge** — "active" (green) or "disabled" (red) based on blocking state
 - **Stats row** — queries today, blocked count, blocked percentage
 - **Toggle switch** — enables/disables blocking via `POST /api/pihole/enable` or `/disable`
 - **Admin link** — opens Pi-hole admin UI at `http://<master>:8080/admin` in a new tab
 - **Polling** — refreshes status every 10 seconds
 - **Graceful degradation** — shows "unavailable" when Pi-hole or backend is unreachable
+
+#### System tab (implemented)
+
+- **System** tab is a read-only Master device health overview (no audio state, no slave info, no control actions).
+- **System Health** card — card-based sections with polling every 20 seconds:
+  - **CPU** — model, current frequency, load (1m / 5m)
+  - **Memory** — total, used, free (MB)
+  - **Temperature** — CPU temperature; visual warning when above safe threshold (70 °C)
+  - **Storage** — total, used, free (GB)
+  - **Network** — active interface (Ethernet / Wi-Fi), IP address, Wi-Fi SSID and signal (if applicable), internet connectivity status (OK / Offline)
+  - **System** — OS version, uptime, hostname
+  - **Application** — SoundMaker version (commit or tag), last update time
+- **Updates** card — same as below; lives under the System tab.
+- Designed to be extendable later (e.g. audio, slaves, system actions).
+
+#### Updates (implemented, under System tab)
+
+- **Current version** — git commit hash (short) and last update timestamp
+- **Check for updates** — compares local repo with remote (GitHub); no system changes
+- **Apply update** — runs only when an update is available; shows real-time log and final success/failure
+- **No automatic polling** — all update actions are user-initiated
 
 ---
 
@@ -343,6 +369,31 @@ The Master stores all state in JSON files. No database.
   ]
 }
 ```
+
+### `state/version.json`
+
+Used by the self-update system. Not committed to Git.
+
+```json
+{
+  "current": "a1b2c3d4e5f6",
+  "last_updated_at": "2026-02-20T14:30:00Z"
+}
+```
+
+### `state/applied_migrations.json`
+
+Tracks which migrations have been run (one-time, in order). Not committed to Git.
+
+```json
+{
+  "applied": ["001_initial.sh", "002_add_foo.sh"]
+}
+```
+
+### `state/update.lock`
+
+A lock file created during an update to prevent concurrent apply. Removed when the update finishes or fails.
 
 ### Where State Lives on Disk
 
@@ -513,6 +564,8 @@ SoundMaker/
 │   │   ├── snapcast_api.py      # Snapcast JSON-RPC client
 │   │   ├── pihole_api.py        # Pi-hole v6 REST API client
 │   │   ├── state_manager.py     # JSON state persistence
+│   │   ├── system_info.py       # Master system info (CPU, memory, temp, storage, network, OS)
+│   │   ├── update_manager.py    # Self-update: version check, apply, migrations
 │   │   └── requirements.txt     # Python dependencies
 │   │
 │   ├── frontend/                # React Web UI (Vite + React 19)
@@ -522,12 +575,16 @@ SoundMaker/
 │   │   │   ├── api.js           # Shared fetch wrapper (401 handling)
 │   │   │   └── components/
 │   │   │       ├── LoginScreen.jsx  # Login form
-│   │   │       └── PiholeCard.jsx
+│   │   │       ├── PiholeCard.jsx
+│   │   │       ├── SystemHealthCard.jsx  # System tab: health dashboard
+│   │   │       └── UpdatesCard.jsx  # System tab: Updates
 │   │   ├── index.html
 │   │   ├── vite.config.js
 │   │   ├── package.json
 │   │   └── dist/                # Built static files (committed to repo)
 │   │
+│   ├── migrations/              # Versioned one-time scripts (run during Apply update)
+│   │   └── 001_initial.sh
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -555,7 +612,8 @@ Managed by `.gitignore`:
 - `node_modules/` — installed locally for development, never on the Pi
 - `__pycache__/` — Python bytecode
 - `.venv/` — Python virtual environment (created on device by install script)
-- `state/*.json` — runtime state files (slaves, config, bluetooth)
+- `state/*.json` — runtime state files (slaves, config, bluetooth, version, applied_migrations)
+- `state/update.lock` — created during update, removed when done
 - `.env` — runtime environment config (Pi-hole password, paths)
 - `.DS_Store` — macOS metadata
 
@@ -598,14 +656,10 @@ sudo PIHOLE_PW=yourpassword ./install_master.sh
 
 The install script handles: system packages, Pi-hole (unattended), Python venv, backend dependencies, environment config (`/opt/soundmaker/.env`), and the `soundmaker-backend.service` systemd unit.
 
-Subsequent updates:
+Subsequent updates (either approach):
 
-```bash
-ssh goorlavi@soundmaker-master.local
-cd /opt/soundmaker
-git pull
-sudo ./master/install_master.sh    # only if dependencies/services changed
-```
+- **From the Web UI:** Open **System** tab → **Updates**, click "Check for updates", then "Apply update". Restart the backend when done (`sudo systemctl restart soundmaker-backend`). See §16.
+- **From SSH:** `git pull`, then optionally `sudo ./master/install_master.sh` (only if dependencies or services changed), then `sudo systemctl restart soundmaker-backend`.
 
 ### Slave Deployment
 
@@ -653,7 +707,99 @@ It SSHes into the target device, runs `git pull`, and optionally re-runs the ins
 
 ---
 
-## 16. Failure Handling
+## 16. Updates and Migrations
+
+The Master supports **manual self-update** from the Web UI. There is no automatic polling or background update check; the user explicitly checks for updates and applies them when desired.
+
+### How Updates Work
+
+1. **Check for updates** — Backend runs `git fetch origin` and compares local `HEAD` with the remote default branch (`origin/HEAD`, or `origin/main` / `origin/master`). No files are modified.
+2. **Apply update** — When the user clicks "Apply update":
+   - A lock is taken (`state/update.lock`) so only one update runs at a time.
+   - `git pull --ff-only origin` updates the repo.
+   - Python dependencies are installed with `pip install -r requirements.txt` (in the backend venv).
+   - Pending **migrations** are run in order (see below).
+   - The new version (commit hash) and timestamp are written to `state/version.json`.
+   - Lock is released. The UI shows a log and final success or failure.
+3. **Restart** — After a successful update, the user must restart the SoundMaker backend to run the new code (e.g. `sudo systemctl restart soundmaker-backend`). The UI reminds them; automatic restart is not performed.
+
+### Web UI (System tab: Updates)
+
+| Control              | Behavior                                                                 |
+| -------------------- | ------------------------------------------------------------------------ |
+| Current version      | Short git commit hash from `version.json` or live `git rev-parse HEAD`   |
+| Last update         | Timestamp from `version.json`, or "—" if never updated via UI            |
+| Check for updates   | POST to API; shows "up to date" or "update available"                     |
+| Apply update        | Enabled only when an update is available; runs apply and streams log     |
+| Progress / result   | Scrollable log during apply; green success or red failure message         |
+
+### System info API (read-only)
+
+| Method | Endpoint             | Purpose                                                       |
+| ------ | -------------------- | ------------------------------------------------------------- |
+| GET    | `/api/system/info`   | Master system info: CPU, memory, temperature, storage, network, OS, application (for System tab dashboard) |
+
+### Updates API Endpoints (all protected by auth)
+
+| Method | Endpoint                 | Purpose                                              |
+| ------ | ------------------------ | ---------------------------------------------------- |
+| GET    | `/api/updates/status`     | Current version and last_updated_at                  |
+| POST   | `/api/updates/check`     | Compare with remote; returns update_available, etc. |
+| POST   | `/api/updates/apply`     | Start update (background); 409 if already running    |
+| GET    | `/api/updates/progress`  | Status, log lines, and result message                |
+
+### Versioning
+
+- **Version** is the short git commit hash (12 characters). It is stored in `state/version.json` after a successful apply.
+- If `version.json` has no `current`, the UI shows the live commit from `git rev-parse HEAD`.
+
+### Migrations
+
+Migrations are **ordered, one-time scripts** that run during "Apply update". They handle structural or config changes that must run once per device.
+
+- **Location:** `master/migrations/`. Only `*.sh` files are run, sorted by filename (e.g. `001_initial.sh`, `002_add_feature.sh`).
+- **Applied list:** `state/applied_migrations.json` holds the list of migration filenames that have already run. Each migration runs only once.
+- **Execution:** Each script is run with `bash` from the repo root. Environment variables set for the script:
+  - `SOUNDMAKER_STATE_DIR` — path to `state/` (e.g. `/opt/soundmaker/state`)
+  - `SOUNDMAKER_REPO` — path to repo root (e.g. `/opt/soundmaker`)
+- **Success/failure:** If a migration exits non-zero or times out, the update stops, the lock is released, and the UI shows the error. No partial state is left behind; already-applied migrations remain recorded.
+
+#### Adding a new migration
+
+1. Create a new file in `master/migrations/` with a numeric prefix so it sorts after existing ones (e.g. `003_my_change.sh`).
+2. Make it executable and idempotent where possible. Use `SOUNDMAKER_STATE_DIR` and `SOUNDMAKER_REPO` if the script needs paths.
+3. Commit and push. On the next "Apply update" on the Pi, the migration will run once and be recorded in `applied_migrations.json`.
+
+Example:
+
+```bash
+#!/usr/bin/env bash
+# 003_add_new_config.sh
+set -euo pipefail
+CONFIG="$SOUNDMAKER_STATE_DIR/config.json"
+# ... add or modify config keys; be idempotent
+echo "Migration 003 done."
+```
+
+### Managing updates: Web UI vs SSH
+
+| Method        | When to use                                                                 |
+| ------------- | --------------------------------------------------------------------------- |
+| **Web UI**    | Normal flow: Check for updates → Apply update → restart backend when done.  |
+| **SSH**       | First-time deploy, or if the UI is unreachable: `git pull`, then optionally `sudo ./master/install_master.sh`, then `sudo systemctl restart soundmaker-backend`. |
+
+Using the Web UI applies the same steps (git pull, pip install, migrations) without SSH. After applying from the UI, restart the backend from SSH or a future "Restart service" control.
+
+### Safety and constraints
+
+- No background polling or cron for updates.
+- Only one update at a time (file lock).
+- On failure, the system stays usable; the log is shown in the UI.
+- Update is considered successful only when all steps (pull, deps, migrations) complete; then the new version is recorded.
+
+---
+
+## 17. Failure Handling
 
 | Failure                     | System behavior                                                  |
 | --------------------------- | ---------------------------------------------------------------- |
@@ -670,7 +816,7 @@ It SSHes into the target device, runs `git pull`, and optionally re-runs the ins
 
 ---
 
-## 17. Network Requirements
+## 18. Network Requirements
 
 | Requirement                    | Details                                          |
 | ------------------------------ | ------------------------------------------------ |
@@ -682,7 +828,7 @@ It SSHes into the target device, runs `git pull`, and optionally re-runs the ins
 
 ---
 
-## 18. Security
+## 19. Security
 
 | Aspect                    | Approach                                                    |
 | ------------------------- | ----------------------------------------------------------- |
@@ -700,7 +846,7 @@ The Web UI requires authentication. Remote access is provided via Tailscale VPN,
 
 ---
 
-## 19. Authentication
+## 20. Authentication
 
 ### How It Works
 
@@ -729,7 +875,7 @@ The password is set during `install_master.sh` (via `SOUNDMAKER_PW` env var or i
 
 ---
 
-## 20. Remote Access (Tailscale VPN)
+## 21. Remote Access (Tailscale VPN)
 
 ### Why Tailscale
 
@@ -781,14 +927,14 @@ Open the URL Tailscale prints (or run `tailscale status` if nothing is printed) 
 
 ---
 
-## 21. Future Possibilities (Out of Scope Now)
+## 22. Future Possibilities (Out of Scope Now)
 
 These are not planned but the architecture supports them:
 
 - **Grouped Slaves** — play different streams in different groups of rooms
 - **Scheduled playback** — time-based rules (morning alarm, sleep timer)
 - **Presence-based automation** — detect phones on network, auto-play
-- **OTA updates** — Master pushes updates to Slaves
+- **OTA updates to Slaves** — Master pushes updates to Slaves (Master self-update via Web UI is implemented; see §16)
 - **Home automation hooks** — trigger events based on audio state
 - **Additional audio sources** — line-in, podcast feeds, TTS announcements
 - **EQ/DSP per room** — Snapcast supports per-client audio processing

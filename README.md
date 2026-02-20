@@ -102,14 +102,13 @@ npm run dev          # local dev server at localhost:5173 (proxies /api to backe
 npm run build        # build to dist/ for deployment
 ```
 
-### Updating the Pi
+### Updating the Master
 
-```bash
-cd /opt/soundmaker
-git pull
-sudo systemctl restart soundmaker-backend.service   # pick up new code
-sudo ./master/install_master.sh                     # only if dependencies/services changed
-```
+**From the Web UI (recommended):** Open **System → Updates**, click "Check for updates", then "Apply update". When it finishes, restart the backend: `ssh` in and run `sudo systemctl restart soundmaker-backend.service`.
+
+**From SSH:** `cd /opt/soundmaker && git pull`, then `sudo systemctl restart soundmaker-backend.service`. Run `sudo ./master/install_master.sh` only if dependencies or system services changed.
+
+Updates run versioned migrations automatically when applied from the UI. See [docs/architecture.md §16](docs/architecture.md) for how updates and migrations work and how to add new migrations.
 
 ## Services
 
@@ -117,7 +116,7 @@ After installation, the Master exposes:
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Web UI | `http://master.local/` | Mobile-first dashboard (dark theme) |
+| Web UI | `http://master.local/` | Mobile-first dashboard (Pi-hole, System → Updates) |
 | Backend API | `http://master.local/api/health` | REST API |
 | Pi-hole Admin | `http://master.local:8080/admin` | Ad-blocking management |
 | Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |  
@@ -134,6 +133,10 @@ After installation, the Master exposes:
 | GET | `/api/pihole/status` | Yes | Pi-hole blocking state + stats |
 | POST | `/api/pihole/enable` | Yes | Enable ad blocking |
 | POST | `/api/pihole/disable?timer=N` | Yes | Disable ad blocking (optional timer in seconds) |
+| GET | `/api/updates/status` | Yes | Current version and last update time |
+| POST | `/api/updates/check` | Yes | Check if a newer version exists on remote |
+| POST | `/api/updates/apply` | Yes | Start update (git pull, deps, migrations) |
+| GET | `/api/updates/progress` | Yes | Update progress log and result |
 
 ## Remote Access (Tailscale VPN)
 

@@ -32,6 +32,33 @@
   color: var(--text);
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.tabs__tab {
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.tabs__tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.tabs__tab--active {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
 .dashboard {
   display: flex;
   flex-direction: column;

@@ -91,7 +91,7 @@ export default function UpdatesCard() {
   return (
     <section className="card updates">
       <div className="card__header">
-        <h2 className="card__title">System → Updates</h2>
+        <h2 className="card__title">Updates</h2>
         {checkResult && !checkResult.error && (
           <span
             className={`card__badge ${

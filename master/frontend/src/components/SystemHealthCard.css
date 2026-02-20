@@ -1,0 +1,77 @@
+.system-health__error,
+.system-health__loading {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.system-health__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.system-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.system-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.system-section__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.system-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.system-info__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.system-info__label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.system-info__value {
+  font-family: ui-monospace, monospace;
+  color: var(--text);
+  text-align: right;
+  word-break: break-all;
+}
+
+.system-info__value--ok {
+  color: var(--green);
+}
+
+.system-info__value--warning {
+  color: var(--orange);
+}
+
+.system-info__value--problem {
+  color: var(--red);
+}
+
+.system-info__warning {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--orange);
+}

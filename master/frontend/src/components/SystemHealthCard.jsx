@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import "./SystemHealthCard.css";
 
-const POLL_INTERVAL_MS = 20_000;
+const POLL_INTERVAL_MS = 7_000;
 
 function formatUptime(seconds) {
   if (seconds == null || seconds < 0) return "—";
@@ -37,6 +37,23 @@ function SectionCard({ title, badge, badgeStatus, children }) {
         )}
       </div>
       <div className="system-section__body">{children}</div>
+    </div>
+  );
+}
+
+function UsageBar({ used, total, label }) {
+  if (total == null || total <= 0 || used == null) return null;
+  const pct = Math.min(100, Math.round((used / total) * 100));
+  const status = pct >= 90 ? "high" : pct >= 70 ? "medium" : "ok";
+  return (
+    <div className="usage-bar">
+      <div className="usage-bar__labels">
+        <span className="usage-bar__label">{label}</span>
+        <span className="usage-bar__pct">{pct}%</span>
+      </div>
+      <div className="usage-bar__track">
+        <div className={`usage-bar__fill usage-bar__fill--${status}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -109,13 +126,14 @@ export default function SystemHealthCard() {
         </SectionCard>
 
         <SectionCard title="Memory">
+          <UsageBar
+            used={memory?.used_mb}
+            total={memory?.total_mb}
+            label={`${memory?.used_mb ?? "—"} / ${memory?.total_mb ?? "—"} MB`}
+          />
           <InfoRow
-            label="Total / Used / Free"
-            value={
-              memory?.total_mb != null && memory?.used_mb != null && memory?.free_mb != null
-                ? `${memory.total_mb} / ${memory.used_mb} / ${memory.free_mb} MB`
-                : null
-            }
+            label="Free"
+            value={memory?.free_mb != null ? `${memory.free_mb} MB` : null}
           />
         </SectionCard>
 
@@ -135,13 +153,14 @@ export default function SystemHealthCard() {
         </SectionCard>
 
         <SectionCard title="Storage">
+          <UsageBar
+            used={storage?.used_gb}
+            total={storage?.total_gb}
+            label={`${storage?.used_gb ?? "—"} / ${storage?.total_gb ?? "—"} GB`}
+          />
           <InfoRow
-            label="Total / Used / Free"
-            value={
-              storage?.total_gb != null && storage?.used_gb != null && storage?.free_gb != null
-                ? `${storage.total_gb} / ${storage.used_gb} / ${storage.free_gb} GB`
-                : null
-            }
+            label="Free"
+            value={storage?.free_gb != null ? `${storage.free_gb} GB` : null}
           />
         </SectionCard>
 

@@ -1,3 +1,10 @@
+/* Main System card: stronger title */
+.system-health.card .card__title {
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
 .system-health__error,
 .system-health__loading {
   font-size: 0.9rem;
@@ -7,21 +14,29 @@
 .system-health__sections {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+}
+
+@media (min-width: 520px) {
+  .system-health__sections {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .system-section {
   background: var(--bg);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 
 .system-section__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .system-section__title {
@@ -35,7 +50,7 @@
 .system-section__body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .system-info__row {
@@ -74,4 +89,53 @@
   margin: 8px 0 0;
   font-size: 0.8rem;
   color: var(--orange);
+}
+
+/* Usage bars (Memory, Storage) */
+.usage-bar {
+  margin-bottom: 4px;
+}
+
+.usage-bar__labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.usage-bar__label {
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+.usage-bar__pct {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.usage-bar__track {
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.usage-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.usage-bar__fill--ok {
+  background: var(--green);
+}
+
+.usage-bar__fill--medium {
+  background: var(--orange);
+}
+
+.usage-bar__fill--high {
+  background: var(--red);
 }

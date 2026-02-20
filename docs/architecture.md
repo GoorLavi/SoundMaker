@@ -395,6 +395,18 @@ Tracks which migrations have been run (one-time, in order). Not committed to Git
 
 A lock file created during an update to prevent concurrent apply. Removed when the update finishes or fails.
 
+### `state/sessions.json`
+
+Web UI session tokens and expiry timestamps. Persisted so logins survive backend restarts. Not committed to Git.
+
+```json
+{
+  "sessions": {
+    "<token>": 1234567890.0
+  }
+}
+```
+
 ### Where State Lives on Disk
 
 All JSON files stored under `/opt/soundmaker/state/` on the Master. Backed up periodically (implementation detail).
@@ -832,7 +844,7 @@ Using the Web UI applies the same steps (git pull, pip install, migrations) with
 
 | Aspect                    | Approach                                                    |
 | ------------------------- | ----------------------------------------------------------- |
-| Web UI authentication     | Password-based login with bcrypt-hashed password, HTTP-only session cookies (7-day TTL) |
+| Web UI authentication     | Password-based login with bcrypt-hashed password, HTTP-only session cookies (long-lived; persisted to state so logins survive restarts) |
 | Login rate limiting       | Max 5 attempts per minute per IP — prevents brute-force     |
 | Remote access             | Tailscale VPN (WireGuard) — encrypted tunnel, no open ports |
 | Snapcast traffic          | Unencrypted PCM on local network — acceptable for home use  |
@@ -857,13 +869,13 @@ The SoundMaker Web UI and all API endpoints (except `/api/health`) require authe
 1. User opens the Web UI and sees a login screen.
 2. User enters the password. Frontend sends `POST /api/auth/login` with the password.
 3. Backend verifies against `SOUNDMAKER_PASSWORD_HASH` (bcrypt).
-4. On success, backend creates a session token and sets an HTTP-only `session` cookie (7-day TTL).
+4. On success, backend creates a session token and sets an HTTP-only `session` cookie with a long TTL (10 years), so the user stays logged in until they log out.
 5. Subsequent API requests include the cookie. The `require_auth` dependency validates it.
 6. On logout, `POST /api/auth/logout` revokes the session and clears the cookie.
 
 ### Session Storage
 
-Sessions are stored in-memory on the backend. On service restart, all sessions are invalidated and users must log in again. This is acceptable for a single-user home system.
+Sessions are stored in memory and persisted to `state/sessions.json`. On service restart, sessions are loaded from disk so users remain logged in. Expired sessions are pruned on load and when validating or creating sessions.
 
 ### Rate Limiting
 

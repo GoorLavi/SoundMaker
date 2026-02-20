@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 import pihole_api
 from auth import (
+    SESSION_TTL,
     check_rate_limit,
     create_session,
     get_password_hash,
@@ -76,7 +77,7 @@ async def auth_login(body: LoginRequest, request: Request):
         value=token,
         httponly=True,
         samesite="lax",
-        max_age=7 * 24 * 3600,
+        max_age=SESSION_TTL,
         path="/",
     )
     return response

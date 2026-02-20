@@ -24,6 +24,13 @@ DEFAULTS: dict[str, Any] = {
     "bluetooth.json": {
         "paired_devices": [],
     },
+    "version.json": {
+        "current": None,
+        "last_updated_at": None,
+    },
+    "applied_migrations.json": {
+        "applied": [],
+    },
 }
 
 

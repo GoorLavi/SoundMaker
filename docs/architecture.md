@@ -741,16 +741,28 @@ Tailscale provides a zero-config WireGuard mesh VPN. It requires no port forward
 2. The Master joins a private Tailscale network (tailnet) and receives a stable `100.x.x.x` IP.
 3. Client devices (phone, laptop) run the Tailscale app and join the same tailnet.
 4. All traffic between devices is encrypted with WireGuard (peer-to-peer when possible, relayed otherwise).
-5. The Web UI is accessible at `http://<tailscale-hostname>/` from anywhere.
+5. The Web UI is accessible from anywhere via MagicDNS at `http://<hostname>.<tailnet>.ts.net/` (e.g. `http://master.tail3ac861.ts.net/`).
+
+### Finding Your Tailscale URL
+
+The Pi's hostname is `master` by default. Your tailnet suffix is shown by:
+
+```bash
+tailscale dns status
+```
+
+Look for `suffix = XXXXX.ts.net`. The Web UI URL is then `http://master.<suffix>/` (e.g. `http://master.tail3ac861.ts.net/`). You can also use the Tailscale IP directly: `http://100.x.x.x/`.
+
+**Note:** Typing `http://master/` in a browser may be treated as a search query. Use the full `.ts.net` URL or the IP to avoid that.
 
 ### What's Accessible Remotely
 
 | Service          | URL via Tailscale                                    | Notes                        |
 | ---------------- | ---------------------------------------------------- | ---------------------------- |
-| Web UI           | `http://soundmaker-master.tailnet-name.ts.net/`      | Requires login               |
-| Pi-hole admin    | `http://soundmaker-master.tailnet-name.ts.net:8080/admin` | Pi-hole's own password  |
-| SSH              | `ssh` via Tailscale (if `--ssh` flag used)           | No port forwarding needed    |
-| Backend API      | `http://soundmaker-master.tailnet-name.ts.net/api/*` | Requires session cookie      |
+| Web UI           | `http://master.<tailnet>.ts.net/`                    | Requires login               |
+| Pi-hole admin    | `http://master.<tailnet>.ts.net:8080/admin`         | Pi-hole's own password      |
+| SSH              | `ssh` via Tailscale (if `--ssh` flag used)          | No port forwarding needed   |
+| Backend API      | `http://master.<tailnet>.ts.net/api/*`               | Requires session cookie     |
 
 ### What Does NOT Work Remotely
 
@@ -765,7 +777,7 @@ Tailscale is installed by `install_master.sh`. After installation, authenticate 
 sudo tailscale up --ssh
 ```
 
-Then install the Tailscale app on your phone/laptop and sign in with the same account.
+Open the URL Tailscale prints (or run `tailscale status` if nothing is printed) and log in with your Tailscale account. Then install the Tailscale app on your phone/laptop and sign in with the same account. Use `tailscale dns status` on the Pi to see your full hostname (e.g. `master.tail3ac861.ts.net`) and bookmark `http://master.<your-tailnet>.ts.net/` for quick access.
 
 ---
 

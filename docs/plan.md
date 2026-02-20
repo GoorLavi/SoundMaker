@@ -75,14 +75,15 @@ Tracks what's done, what's in progress, and what's next. Each phase builds on th
 
 ### Tailscale VPN
 - [x] Add Tailscale install section to `install_master.sh`
-- [x] Add `SOUNDMAKER_PW` password hashing to install script
-- [ ] Install Tailscale on Master Pi and authenticate (`sudo tailscale up --ssh`)
-- [ ] Install Tailscale app on phone and verify remote Web UI access
+- [x] Add `SOUNDMAKER_PW` password hashing to install script (bcrypt directly; passlib was incompatible with bcrypt 4.1+)
+- [x] Install Tailscale on Master Pi and authenticate (`sudo tailscale up --ssh`)
+- [x] Install Tailscale app on phone and verify remote Web UI access
 
 ### Documentation
 - [x] Update `architecture.md` — new sections 19 (Authentication) and 20 (Remote Access), updated Security table
 - [x] Update `plan.md` — add Phase 2.5
 - [x] Update `README.md` — remote access instructions
+- [x] Document Tailscale URL format (`http://master.<tailnet>.ts.net/`) and how to find tailnet (`tailscale dns status`)
 
 ---
 

@@ -26,6 +26,13 @@ from auth import (
     verify_password,
 )
 from state_manager import STATE_DIR, load
+from update_manager import (
+    check_for_updates,
+    get_current_version,
+    get_last_updated_at,
+    get_progress,
+    start_apply,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +139,40 @@ async def pihole_disable(timer: Optional[int] = None):
     except Exception as exc:
         logger.warning("Pi-hole disable failed: %s", exc)
         return JSONResponse({"error": "Pi-hole unreachable"}, status_code=502)
+
+
+# ---------------------------------------------------------------------------
+# Updates (protected)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/updates/status", dependencies=[Depends(require_auth)])
+async def updates_status():
+    """Current version and last update time for the UI."""
+    return {
+        "current_version": get_current_version(),
+        "last_updated_at": get_last_updated_at(),
+    }
+
+
+@app.post("/api/updates/check", dependencies=[Depends(require_auth)])
+async def updates_check():
+    """Check if a newer version exists on the remote. Does not modify the system."""
+    return check_for_updates()
+
+
+@app.post("/api/updates/apply", dependencies=[Depends(require_auth)])
+async def updates_apply():
+    """Start the update process (runs in background). Returns immediately."""
+    result = start_apply()
+    if not result["ok"]:
+        return JSONResponse({"error": result["error"]}, status_code=409)
+    return {"ok": True}
+
+
+@app.get("/api/updates/progress", dependencies=[Depends(require_auth)])
+async def updates_progress():
+    """Real-time progress: status, log lines, and result message."""
+    return get_progress()
 
 
 # ---------------------------------------------------------------------------

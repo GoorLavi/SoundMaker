@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { setOnAuthLost } from "./api";
 import PiholeCard from "./components/PiholeCard";
+import UpdatesCard from "./components/UpdatesCard";
 import LoginScreen from "./components/LoginScreen";
 import "./App.css";
 
@@ -39,6 +40,7 @@ export default function App() {
       </header>
       <main className="dashboard">
         <PiholeCard />
+        <UpdatesCard />
       </main>
     </div>
   );

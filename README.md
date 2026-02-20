@@ -148,17 +148,17 @@ SoundMaker includes [Tailscale](https://tailscale.com/) for secure remote access
 sudo tailscale up --ssh
 ```
 
-3. Open the printed URL in a browser and log in with your Tailscale account.
+3. Open the printed URL in a browser (or run `tailscale status` if nothing is printed) and log in with your Tailscale account.
 4. Install the Tailscale app on your phone (iOS/Android) and sign in with the same account.
-5. Access the Web UI from anywhere at `http://<tailscale-hostname>/`.
+5. Find your Web UI URL: on the Pi run `tailscale dns status` and note the suffix (e.g. `tail3ac861.ts.net`). The Web UI is at `http://master.<suffix>/` (e.g. `http://master.tail3ac861.ts.net/`). You can also use the Tailscale IP from `tailscale status` (e.g. `http://100.117.114.47/`).
 
-The Web UI will prompt for the password you set during installation.
+The Web UI will prompt for the password you set during installation. Bookmark the URL on your phone for quick access.
 
 ### What works remotely
 
 - Web UI dashboard (room control, volume, source management)
 - Pi-hole toggle and stats
-- Pi-hole admin (`http://<tailscale-hostname>:8080/admin`)
+- Pi-hole admin (`http://master.<tailnet>.ts.net:8080/admin`)
 - SSH (if `--ssh` flag was used)
 
 ### What does NOT work remotely

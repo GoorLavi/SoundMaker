@@ -205,12 +205,13 @@ The Master runs the following services, all managed by systemd:
 
 | Service               | Technology               | Purpose                                        |
 | --------------------- | ------------------------ | ---------------------------------------------- |
+| Caddy                 | Caddy v2                 | HTTPS reverse proxy (ports 80/443 → backend :8081) |
 | Snapcast Server       | `snapserver`             | Distributes synced audio to all Slaves          |
 | Spotify Connect       | `raspotify`              | Receives Spotify audio from phones/laptops      |
 | Bluetooth A2DP        | BlueZ + PulseAudio       | Receives Bluetooth audio from paired devices    |
 | Internet Radio        | `mpv`                    | Plays default stream URL via PulseAudio         |
 | Audio Mixer           | PulseAudio               | Merges all sources, outputs to Snapcast pipe    |
-| Backend API           | Python + FastAPI          | REST API, source management, state, BT control  |
+| Backend API           | Python + FastAPI          | REST API on :8081, behind Caddy                 |
 | Web UI                | React (static files)     | Mobile-first SPA served by FastAPI              |
 | Pi-hole               | Pi-hole                  | DNS-level ad blocking for the whole network     |
 
@@ -219,6 +220,7 @@ The Master runs the following services, all managed by systemd:
 ```
 network-online
     │
+    ├── caddy (HTTPS :443, HTTP :80 → backend :8081)
     ├── pulseaudio
     ├── snapserver
     ├── bluetoothd (BlueZ)
@@ -226,11 +228,12 @@ network-online
     └── pihole-FTL
             │
             ▼
-    soundmaker-backend.service
+    soundmaker-backend.service (:8081)
         │
         ├── starts/stops mpv (radio) internally
         ├── monitors raspotify events
         ├── monitors BlueZ D-Bus signals
+        ├── runs alarm scheduler
         └── serves React UI + REST API
 ```
 
@@ -312,7 +315,9 @@ During development, `npm run dev` runs Vite's dev server with a proxy to the bac
 | ------------------------------ | ------------------------ | ----- | ------------------------------------ |
 | Master → Slaves (audio)       | Snapcast TCP stream      | 1704  | Synced PCM audio distribution        |
 | Master ↔ Slaves (control)     | Snapcast JSON-RPC        | 1705  | Volume, mute, client status          |
-| Browser → Master (UI)         | HTTP                     | 80    | React SPA + FastAPI REST API         |
+| Browser → Master (UI)         | HTTPS via Caddy          | 443   | React SPA + FastAPI REST API         |
+| Browser → Master (HTTP→HTTPS) | HTTP redirect            | 80    | Caddy redirects to HTTPS             |
+| Caddy → Backend (internal)    | HTTP                     | 8081  | Reverse proxy to FastAPI             |
 | Remote device → Master (VPN)  | Tailscale (WireGuard)    | —     | Encrypted tunnel for remote access   |
 | Phone → Master (Spotify)      | Spotify Connect (WiFi)   | —     | Handled by raspotify/librespot       |
 | Phone → Master (Bluetooth)    | Bluetooth A2DP           | —     | Handled by BlueZ                     |
@@ -625,7 +630,8 @@ SoundMaker/
 │   │   └── dist/                # Built static files (committed to repo)
 │   │
 │   ├── migrations/              # Versioned one-time scripts (run during Apply update)
-│   │   └── 001_initial.sh
+│   │   ├── 001_initial.sh
+│   │   └── 002_caddy_spotify_alarm.sh  # Caddy HTTPS, raspotify, alarm (prints re-run instructions)
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -864,7 +870,8 @@ Using the Web UI applies the same steps (git pull, pip install, migrations) with
 | Same local network             | Master and all Slaves on the same WiFi/LAN       |
 | 2.4GHz WiFi available          | Pi Zero 2 W only supports 2.4GHz                 |
 | mDNS / Avahi                   | For `soundmaker-master.local` hostname resolution |
-| Open TCP ports on Master       | 1704 (Snapcast audio), 1705 (Snapcast control), 80 (Web UI), 8080 (Pi-hole admin), 53 (Pi-hole DNS) |
+| Open TCP ports on Master       | 443 (HTTPS via Caddy), 80 (HTTP→HTTPS redirect), 1704 (Snapcast audio), 1705 (Snapcast control), 8080 (Pi-hole admin), 53 (Pi-hole DNS) |
+| Router port forwarding         | Ports 80 and 443 forwarded to the Pi for HTTPS (Let's Encrypt) and Spotify OAuth |
 | Stable internet on Master      | For radio streaming, Spotify, Pi-hole updates     |
 
 ---

@@ -156,6 +156,39 @@ def _api_put(access_token: str, path: str, json: Optional[dict] = None, **kwargs
         )
 
 
+def get_user_playlists(access_token: str, limit: int = 50) -> list[dict]:
+    """GET /me/playlists. Returns list of {name, uri, image_url, track_count}."""
+    all_playlists: list[dict] = []
+    offset = 0
+    while True:
+        resp = _api_get(access_token, f"/me/playlists?limit={limit}&offset={offset}")
+        if resp.status_code != 200:
+            logger.warning("Spotify get playlists failed: %s %s", resp.status_code, resp.text)
+            break
+        data = resp.json()
+        items = data.get("items") or []
+        for p in items:
+            images = p.get("images") or []
+            all_playlists.append({
+                "name": p.get("name", ""),
+                "uri": p.get("uri", ""),
+                "image_url": images[0]["url"] if images else None,
+                "track_count": (p.get("tracks") or {}).get("total", 0),
+            })
+        if not data.get("next"):
+            break
+        offset += limit
+    return all_playlists
+
+
+def fetch_playlists() -> list[dict]:
+    """Public helper: get access token and return user's playlists."""
+    token = _get_access_token()
+    if not token:
+        return []
+    return get_user_playlists(token)
+
+
 def get_devices(access_token: str) -> list[dict]:
     """GET /me/player/devices. Returns list of device dicts."""
     resp = _api_get(access_token, "/me/player/devices")

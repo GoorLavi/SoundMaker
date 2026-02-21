@@ -262,6 +262,15 @@ def spotify_status():
     }
 
 
+@app.get("/api/spotify/playlists", dependencies=[Depends(require_auth)])
+def spotify_playlists():
+    """Return the user's Spotify playlists (name, uri, image, track count)."""
+    if not spotify_auth.is_connected():
+        return JSONResponse({"error": "Spotify not connected"}, status_code=400)
+    playlists = spotify_auth.fetch_playlists()
+    return {"playlists": playlists}
+
+
 @app.post("/api/spotify/disconnect", dependencies=[Depends(require_auth)])
 def spotify_disconnect():
     """Remove stored Spotify refresh token."""

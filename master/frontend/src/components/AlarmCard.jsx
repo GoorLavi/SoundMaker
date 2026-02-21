@@ -19,9 +19,9 @@ export default function AlarmCard() {
   const [alarm, setAlarm] = useState(null);
   const [spotify, setSpotify] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [playlistInput, setPlaylistInput] = useState("");
+  const [playlists, setPlaylists] = useState([]);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const intervalRef = useRef(null);
-  const playlistDebounceRef = useRef(null);
 
   const fetchAlarm = useCallback(async () => {
     try {
@@ -29,7 +29,6 @@ export default function AlarmCard() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setAlarm(data);
-      setPlaylistInput(data.playlist_uri ?? "");
     } catch {
       setAlarm(null);
     }
@@ -46,6 +45,20 @@ export default function AlarmCard() {
     }
   }, []);
 
+  const fetchPlaylists = useCallback(async () => {
+    setLoadingPlaylists(true);
+    try {
+      const res = await apiFetch("/api/spotify/playlists");
+      if (!res.ok) return;
+      const data = await res.json();
+      setPlaylists(data.playlists || []);
+    } catch {
+      setPlaylists([]);
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  }, []);
+
   const fetchAll = useCallback(() => {
     fetchAlarm();
     fetchSpotify();
@@ -56,6 +69,10 @@ export default function AlarmCard() {
     intervalRef.current = setInterval(fetchAll, POLL_INTERVAL);
     return () => clearInterval(intervalRef.current);
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (spotify?.connected) fetchPlaylists();
+  }, [spotify?.connected, fetchPlaylists]);
 
   // After OAuth callback, URL may have ?spotify=connected
   useEffect(() => {
@@ -102,11 +119,9 @@ export default function AlarmCard() {
     updateAlarm({ time });
   };
 
-  const handlePlaylistBlur = () => {
-    const uri = playlistInput.trim() || null;
-    if (alarm && (uri !== (alarm.playlist_uri || ""))) {
-      updateAlarm({ playlist_uri: uri });
-    }
+  const handlePlaylistChange = (e) => {
+    const uri = e.target.value || null;
+    updateAlarm({ playlist_uri: uri });
   };
 
   const handleConnectSpotify = async () => {
@@ -201,17 +216,27 @@ export default function AlarmCard() {
         <label className="alarm__label" htmlFor="alarm-playlist">
           Playlist (optional)
         </label>
-        <input
-          id="alarm-playlist"
-          type="text"
-          className="alarm__playlist-input"
-          placeholder="e.g. spotify:playlist:..."
-          value={playlistInput}
-          onChange={(e) => setPlaylistInput(e.target.value)}
-          onBlur={handlePlaylistBlur}
-          disabled={saving}
-          aria-label="Spotify playlist URI"
-        />
+        {spotify?.connected && playlists.length > 0 ? (
+          <select
+            id="alarm-playlist"
+            className="alarm__playlist-select"
+            value={alarm.playlist_uri || ""}
+            onChange={handlePlaylistChange}
+            disabled={saving}
+            aria-label="Choose a Spotify playlist"
+          >
+            <option value="">No playlist (resume last)</option>
+            {playlists.map((p) => (
+              <option key={p.uri} value={p.uri}>
+                {p.name} ({p.track_count} tracks)
+              </option>
+            ))}
+          </select>
+        ) : spotify?.connected && loadingPlaylists ? (
+          <p className="alarm__spotify-msg">Loading playlists…</p>
+        ) : (
+          <p className="alarm__spotify-msg">Connect Spotify to choose a playlist.</p>
+        )}
       </div>
 
       <div className="alarm__spotify">

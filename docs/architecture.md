@@ -407,6 +407,32 @@ Web UI session tokens and expiry timestamps. Persisted so logins survive backend
 }
 ```
 
+### `state/alarm.json`
+
+Used by the morning wake-up feature. Not committed to Git.
+
+```json
+{
+  "enabled": true,
+  "time": "07:00",
+  "playlist_uri": "spotify:playlist:abc123..."
+}
+```
+
+- **enabled** — whether the alarm is active
+- **time** — local time in HH:MM (24-hour)
+- **playlist_uri** — optional Spotify playlist URI; if unset, alarm still fires but playback uses user's default or last context
+
+### `state/spotify.json`
+
+Stores Spotify Web API OAuth refresh token so the backend can start playback at alarm time. Not committed to Git.
+
+```json
+{
+  "refresh_token": "AQC..."
+}
+```
+
 ### Where State Lives on Disk
 
 All JSON files stored under `/opt/soundmaker/state/` on the Master. Backed up periodically (implementation detail).
@@ -568,7 +594,9 @@ SoundMaker/
 ├── master/
 │   ├── backend/                 # Python FastAPI backend
 │   │   ├── main.py              # Entry point, FastAPI app
-│   │   ├── auth.py              # Authentication, sessions, rate limiting
+│   │   ├── auth.py              # Authentication, persistent sessions (state/sessions.json), rate limiting
+│   │   ├── alarm_manager.py     # Morning wake-up: alarm config, scheduler, Spotify playback at alarm time
+│   │   ├── spotify_auth.py      # Spotify Web API OAuth (auth URL, callback, token refresh) and playback API
 │   │   ├── audio_manager.py     # Source switching, priority logic
 │   │   ├── radio_player.py      # mpv process management
 │   │   ├── spotify_monitor.py   # raspotify event monitoring
@@ -588,6 +616,7 @@ SoundMaker/
 │   │   │   └── components/
 │   │   │       ├── LoginScreen.jsx  # Login form
 │   │   │       ├── PiholeCard.jsx
+│   │   │       ├── AlarmCard.jsx  # Dashboard: morning wake-up (time, toggle, playlist, Spotify connect)
 │   │   │       ├── SystemHealthCard.jsx  # System tab: health dashboard
 │   │   │       └── UpdatesCard.jsx  # System tab: Updates
 │   │   ├── index.html
@@ -624,7 +653,7 @@ Managed by `.gitignore`:
 - `node_modules/` — installed locally for development, never on the Pi
 - `__pycache__/` — Python bytecode
 - `.venv/` — Python virtual environment (created on device by install script)
-- `state/*.json` — runtime state files (slaves, config, bluetooth, version, applied_migrations)
+- `state/*.json` — runtime state files (slaves, config, bluetooth, version, applied_migrations, sessions, alarm, spotify)
 - `state/update.lock` — created during update, removed when done
 - `.env` — runtime environment config (Pi-hole password, paths)
 - `.DS_Store` — macOS metadata
@@ -939,12 +968,41 @@ Open the URL Tailscale prints (or run `tailscale status` if nothing is printed) 
 
 ---
 
-## 22. Future Possibilities (Out of Scope Now)
+## 22. Morning Wake-up (Alarm)
+
+The Master can act as a **morning alarm**: at a user-configured time it starts playing a Spotify playlist over **HDMI** (e.g. to a JBL soundbar 5.1). This feature does not depend on PulseAudio or Snapcast; it is designed so that future multi-room (Phases 3–8) remains compatible.
+
+### Flow
+
+1. User sets **alarm time** and optional **playlist URI** in the Web UI and enables the alarm.
+2. User **connects Spotify** once via OAuth (button in UI → Spotify login → callback stores refresh token in `state/spotify.json`).
+3. **Raspotify** runs on the Master so the Pi appears as a Spotify Connect device (e.g. "SoundMaker"). Default audio output is **HDMI** so playback goes to the connected soundbar (and can wake the soundbar/ARC when playback starts).
+4. A **scheduler** in the backend checks every minute. When current local time matches the alarm time and the alarm is enabled, the backend uses the **Spotify Web API** (refresh token → access token) to: transfer playback to the Pi's device, then start the configured playlist (or user's last context if no playlist is set).
+5. Music plays on the Pi's HDMI output → soundbar.
+
+### State and API
+
+- **state/alarm.json** — `enabled`, `time` (HH:MM), `playlist_uri` (optional).
+- **state/spotify.json** — `refresh_token` (from OAuth callback).
+- **API:** `GET /api/alarm`, `PUT /api/alarm`; `GET /api/spotify/auth-url`, `GET /api/spotify/callback`, `GET /api/spotify/status`.
+
+### Configuration
+
+- **Env:** `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` (from Spotify Developer Dashboard). Redirect URI must be set in the dashboard (e.g. `http://master.local/api/spotify/callback` and, for dev, `http://localhost:8000/api/spotify/callback`).
+- **Raspotify** is installed by `install_master.sh`. Default audio output should be HDMI so that the JBL soundbar receives the stream; if the soundbar is connected via ARC, starting playback typically wakes it.
+
+### Future compatibility
+
+When Phases 3–8 (PulseAudio, Snapcast, rooms, radio, source manager) are implemented, the alarm can remain **HDMI-only** (no need to route alarm audio through Snapcast), or the alarm-fire logic can be extended to also route to Snapcast if desired.
+
+---
+
+## 23. Future Possibilities (Out of Scope Now)
 
 These are not planned but the architecture supports them:
 
 - **Grouped Slaves** — play different streams in different groups of rooms
-- **Scheduled playback** — time-based rules (morning alarm, sleep timer)
+- **Sleep timer** — stop playback after a set duration
 - **Presence-based automation** — detect phones on network, auto-play
 - **OTA updates to Slaves** — Master pushes updates to Slaves (Master self-update via Web UI is implemented; see §16)
 - **Home automation hooks** — trigger events based on audio state

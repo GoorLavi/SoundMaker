@@ -31,6 +31,14 @@ DEFAULTS: dict[str, Any] = {
     "applied_migrations.json": {
         "applied": [],
     },
+    "alarm.json": {
+        "enabled": False,
+        "time": "07:00",
+        "playlist_uri": None,
+    },
+    "spotify.json": {
+        "refresh_token": None,
+    },
 }
 
 

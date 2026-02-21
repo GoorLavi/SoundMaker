@@ -61,7 +61,8 @@ Tracks what's done, what's in progress, and what's next. Each phase builds on th
 > **Status: DONE**
 
 ### Backend authentication
-- [x] Create `auth.py` — bcrypt password hashing, in-memory session store, `require_auth` FastAPI dependency
+- [x] Create `auth.py` — bcrypt password hashing, persistent session store (`state/sessions.json`), `require_auth` FastAPI dependency
+- [x] Long-lived sessions (10-year TTL) and cookie — "remember me forever" after first login; sessions survive backend restarts
 - [x] Add login rate limiting (5 attempts/min per IP)
 - [x] Add auth endpoints to `main.py` (`/api/auth/login`, `/api/auth/logout`, `/api/auth/check`)
 - [x] Protect existing API routes with `Depends(require_auth)`
@@ -123,6 +124,32 @@ Tracks what's done, what's in progress, and what's next. Each phase builds on th
 
 ### Documentation
 - [x] `architecture.md` — Navigation, System tab, System Health card, GET `/api/system/info`, project structure (system_info.py, SystemHealthCard.jsx)
+
+---
+
+## Phase 2.8: Morning Wake-up (Spotify Connect alarm)
+> **Status: TODO**
+
+Alarm at a set time: Pi plays a Spotify playlist over HDMI to the JBL soundbar. No dependency on PulseAudio/Snapcast; alarm is HDMI-only. Designed so future Phases 3–8 (music management) remain compatible.
+
+### Backend
+- [ ] Add `state/alarm.json` — enabled, time (HH:MM), playlist_uri (optional)
+- [ ] Add `state/spotify.json` — refresh_token for Spotify Web API (user OAuth)
+- [ ] Create `alarm_manager.py` — load/save alarm config, background scheduler (check every minute), at alarm time call Spotify Web API: transfer playback to Pi device + start playlist
+- [ ] Create `spotify_auth.py` — OAuth: auth URL, callback (exchange code → tokens, save refresh_token), token refresh; Spotify Web API helpers (get devices, transfer playback, start playback)
+- [ ] Env: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`; redirect URI in Spotify Dashboard (e.g. `http://master.local/api/spotify/callback`)
+- [ ] API: `GET /api/alarm`, `PUT /api/alarm` (body: enabled, time, playlist_uri); `GET /api/spotify/auth-url`, `GET /api/spotify/callback`, `GET /api/spotify/status`
+- [ ] Install `raspotify` on Master (Pi appears as "SoundMaker" Spotify Connect device); ensure default audio output is HDMI for alarm playback
+- [ ] Add raspotify to `install_master.sh`; document HDMI default for JBL soundbar / ARC wake
+
+### Frontend — Wake-up section (Dashboard)
+- [ ] Alarm card: enable/disable toggle, time picker (HH:MM), optional playlist URI field, "Next alarm" summary
+- [ ] "Connect Spotify" flow: button opens auth URL; after callback, show "Spotify connected" and optional disconnect
+- [ ] Comfortable UX: clear labels, native time input, visible next alarm time, Spotify connection status
+
+### Test
+- [ ] Set alarm time and enable; connect Spotify via UI; at alarm time verify playlist starts on Pi (HDMI → soundbar)
+- [ ] Disable alarm; verify no playback at that time
 
 ---
 

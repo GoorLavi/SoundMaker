@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { setOnAuthLost } from "./api";
+import AlarmCard from "./components/AlarmCard";
 import PiholeCard from "./components/PiholeCard";
 import SystemHealthCard from "./components/SystemHealthCard";
 import UpdatesCard from "./components/UpdatesCard";
@@ -62,7 +63,12 @@ export default function App() {
         </button>
       </nav>
       <main className="dashboard">
-        {activeTab === TAB_DASHBOARD && <PiholeCard />}
+        {activeTab === TAB_DASHBOARD && (
+          <>
+            <AlarmCard />
+            <PiholeCard />
+          </>
+        )}
         {activeTab === TAB_SYSTEM && (
           <>
             <SystemHealthCard />

@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Cookie, Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import pihole_api
+from alarm_manager import get_alarm, set_alarm, start_scheduler, stop_scheduler
 from auth import (
     SESSION_TTL,
     check_rate_limit,
@@ -35,6 +36,7 @@ from update_manager import (
     get_progress,
     start_apply,
 )
+import spotify_auth
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +46,12 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    yield
-    await pihole_api.close()
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
+        await pihole_api.close()
 
 
 app = FastAPI(title="SoundMaker", lifespan=lifespan)
@@ -185,6 +191,82 @@ async def updates_apply():
 async def updates_progress():
     """Real-time progress: status, log lines, and result message."""
     return get_progress()
+
+
+# ---------------------------------------------------------------------------
+# Alarm / Morning wake-up (protected except callback)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/alarm", dependencies=[Depends(require_auth)])
+def alarm_get():
+    """Current alarm config: enabled, time (HH:MM), playlist_uri."""
+    return get_alarm()
+
+
+class AlarmUpdate(BaseModel):
+    enabled: bool = False
+    time: str = "07:00"
+    playlist_uri: Optional[str] = None
+
+
+@app.put("/api/alarm", dependencies=[Depends(require_auth)])
+def alarm_put(body: AlarmUpdate):
+    """Update alarm: enabled, time (HH:MM), playlist_uri (optional)."""
+    return set_alarm(body.enabled, body.time, body.playlist_uri)
+
+
+def _redirect_uri(request: Request) -> str:
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/api/spotify/callback"
+
+
+@app.get("/api/spotify/auth-url", dependencies=[Depends(require_auth)])
+def spotify_auth_url(request: Request):
+    """Return Spotify OAuth URL for the user to open. Redirect URI is derived from request."""
+    if not spotify_auth.is_configured():
+        return JSONResponse({"error": "Spotify not configured (missing client ID/secret)"}, status_code=503)
+    url = spotify_auth.get_auth_url(_redirect_uri(request))
+    if not url:
+        return JSONResponse({"error": "Spotify not configured"}, status_code=503)
+    return {"url": url}
+
+
+@app.get("/api/spotify/callback")
+async def spotify_callback(request: Request, code: Optional[str] = None, error: Optional[str] = None):
+    """
+    OAuth callback from Spotify. No auth required (user arrives from Spotify with ?code=...).
+    Exchanges code for tokens, saves refresh_token, then redirects to frontend with ?spotify=ok.
+    """
+    if error:
+        logger.warning("Spotify OAuth error: %s", error)
+        base = str(request.base_url).rstrip("/")
+        return JSONResponse(status_code=400, content={"error": f"Spotify auth failed: {error}"})
+    if not code:
+        return JSONResponse({"error": "Missing code"}, status_code=400)
+    redirect_uri = _redirect_uri(request)
+    try:
+        spotify_auth.exchange_code_for_tokens(code, redirect_uri)
+    except Exception as exc:
+        logger.exception("Spotify token exchange failed: %s", exc)
+        return JSONResponse({"error": "Token exchange failed"}, status_code=502)
+    base = str(request.base_url).rstrip("/")
+    return RedirectResponse(url=f"{base}/?spotify=connected", status_code=302)
+
+
+@app.get("/api/spotify/status", dependencies=[Depends(require_auth)])
+def spotify_status():
+    """Whether Spotify is configured and connected (has refresh token)."""
+    return {
+        "configured": spotify_auth.is_configured(),
+        "connected": spotify_auth.is_connected(),
+    }
+
+
+@app.post("/api/spotify/disconnect", dependencies=[Depends(require_auth)])
+def spotify_disconnect():
+    """Remove stored Spotify refresh token."""
+    spotify_auth.disconnect()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

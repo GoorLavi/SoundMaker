@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
-SCOPES = "user-read-playback-state user-modify-playback-state"
+SCOPES = "user-read-playback-state user-modify-playback-state playlist-read-private"
 SOUNDMAKER_DEVICE_NAME = "SoundMaker"
 
 

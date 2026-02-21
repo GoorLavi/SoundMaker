@@ -631,7 +631,8 @@ SoundMaker/
 │   │
 │   ├── migrations/              # Versioned one-time scripts (run during Apply update)
 │   │   ├── 001_initial.sh
-│   │   └── 002_caddy_spotify_alarm.sh  # Caddy HTTPS, raspotify, alarm (prints re-run instructions)
+│   │   ├── 002_caddy_spotify_alarm.sh  # Caddy HTTPS, alarm (prints re-run instructions)
+│   │   └── 003_raspotify.sh            # Install and enable raspotify (Spotify Connect device)
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -810,6 +811,7 @@ Migrations are **ordered, one-time scripts** that run during "Apply update". The
   - `SOUNDMAKER_STATE_DIR` — path to `state/` (e.g. `/opt/soundmaker/state`)
   - `SOUNDMAKER_REPO` — path to repo root (e.g. `/opt/soundmaker`)
 - **Success/failure:** If a migration exits non-zero or times out, the update stops, the lock is released, and the UI shows the error. No partial state is left behind; already-applied migrations remain recorded.
+- **Migrations that install system packages** (e.g. `003_raspotify.sh`) run as the backend user and use `sudo` for apt/systemctl. The backend user should have **passwordless sudo** for those commands so the migration can complete when "Apply update" is run from the Web UI.
 
 #### Adding a new migration
 

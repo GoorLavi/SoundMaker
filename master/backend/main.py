@@ -206,13 +206,14 @@ def alarm_get():
 class AlarmUpdate(BaseModel):
     enabled: bool = False
     time: str = "07:00"
+    days: Optional[list[str]] = None
     playlist_uri: Optional[str] = None
 
 
 @app.put("/api/alarm", dependencies=[Depends(require_auth)])
 def alarm_put(body: AlarmUpdate):
-    """Update alarm: enabled, time (HH:MM), playlist_uri (optional)."""
-    return set_alarm(body.enabled, body.time, body.playlist_uri)
+    """Update alarm: enabled, time (HH:MM), days (list), playlist_uri (optional)."""
+    return set_alarm(body.enabled, body.time, body.days, body.playlist_uri)
 
 
 def _redirect_uri(request: Request) -> str:

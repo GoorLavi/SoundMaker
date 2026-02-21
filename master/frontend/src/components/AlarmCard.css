@@ -60,6 +60,7 @@
 }
 
 .alarm__time-row,
+.alarm__days-row,
 .alarm__playlist-row,
 .alarm__spotify {
   margin-bottom: 16px;
@@ -106,6 +107,55 @@
     font-size: 1.1rem;
     padding: 14px 16px;
   }
+}
+
+.alarm__days {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.alarm__day {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.alarm__day:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.alarm__day--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.alarm__day--active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+
+.alarm__day:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alarm__days-summary {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 .alarm__next {

@@ -24,14 +24,31 @@ def get_alarm() -> dict[str, Any]:
     return load(ALARM_FILENAME)
 
 
-def set_alarm(enabled: bool, time_str: str, playlist_uri: Optional[str] = None) -> dict[str, Any]:
-    """time_str: HH:MM (24-hour). playlist_uri can be None."""
+VALID_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+DAY_INDEX_MAP = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def set_alarm(
+    enabled: bool,
+    time_str: str,
+    days: Optional[list[str]] = None,
+    playlist_uri: Optional[str] = None,
+) -> dict[str, Any]:
+    """time_str: HH:MM (24-hour). days: list of day abbreviations. playlist_uri can be None."""
     data = load(ALARM_FILENAME)
     data["enabled"] = bool(enabled)
     data["time"] = _normalize_time(time_str)
+    data["days"] = _normalize_days(days)
     data["playlist_uri"] = playlist_uri.strip() or None if playlist_uri else None
     save(ALARM_FILENAME, data)
     return data
+
+
+def _normalize_days(days: Optional[list[str]]) -> list[str]:
+    if not days:
+        return sorted(VALID_DAYS, key=lambda d: DAY_INDEX_MAP[d])
+    normalized = [d.lower().strip()[:3] for d in days if d.lower().strip()[:3] in VALID_DAYS]
+    return sorted(set(normalized), key=lambda d: DAY_INDEX_MAP[d]) if normalized else sorted(VALID_DAYS, key=lambda d: DAY_INDEX_MAP[d])
 
 
 def _normalize_time(s: str) -> str:
@@ -55,10 +72,20 @@ def _current_time_str() -> str:
     return datetime.now().strftime("%H:%M")
 
 
+WEEKDAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def _current_day_abbr() -> str:
+    return WEEKDAY_NAMES[datetime.now().weekday()]
+
+
 def _should_fire(alarm: dict[str, Any]) -> bool:
     if not alarm.get("enabled"):
         return False
-    return _current_time_str() == alarm.get("time", "07:00")
+    if _current_time_str() != alarm.get("time", "07:00"):
+        return False
+    days = alarm.get("days") or WEEKDAY_NAMES
+    return _current_day_abbr() in days
 
 
 # Tracks (year, month, day, hour, minute) we last fired so we only fire once per alarm minute.

@@ -4,15 +4,39 @@ import "./AlarmCard.css";
 
 const POLL_INTERVAL = 30_000;
 
-function formatNextAlarm(enabled, time) {
+const ALL_DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DAY_LABELS = { sun: "S", mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S" };
+const DAY_FULL = { sun: "Sun", mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat" };
+const JS_TO_DAY = [/* 0=Sun */ "sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+function formatNextAlarm(enabled, time, days) {
   if (!enabled || !time) return null;
+  const activeDays = days && days.length > 0 ? days : ALL_DAYS;
   const [h, m] = time.split(":").map(Number);
   const now = new Date();
-  let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
-  if (next <= now) next.setDate(next.getDate() + 1);
-  const isToday = next.toDateString() === now.toDateString();
-  const timeStr = next.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return isToday ? `Today at ${timeStr}` : `Tomorrow at ${timeStr}`;
+  for (let offset = 0; offset < 8; offset++) {
+    const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m, 0);
+    if (candidate <= now) continue;
+    const dayAbbr = JS_TO_DAY[candidate.getDay()];
+    if (!activeDays.includes(dayAbbr)) continue;
+    const isToday = candidate.toDateString() === now.toDateString();
+    const isTomorrow = offset === 1 || (offset === 0 && false);
+    const tomorrowCheck = new Date(now); tomorrowCheck.setDate(tomorrowCheck.getDate() + 1);
+    const timeStr = candidate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (isToday) return `Today at ${timeStr}`;
+    if (candidate.toDateString() === tomorrowCheck.toDateString()) return `Tomorrow at ${timeStr}`;
+    return `${DAY_FULL[dayAbbr]} at ${timeStr}`;
+  }
+  return null;
+}
+
+function describeDays(days) {
+  if (!days || days.length === 0 || days.length === 7) return "Every day";
+  const weekdays = ["mon", "tue", "wed", "thu", "fri"];
+  const weekend = ["sat", "sun"];
+  if (weekdays.every((d) => days.includes(d)) && !days.includes("sat") && !days.includes("sun")) return "Weekdays";
+  if (weekend.every((d) => days.includes(d)) && days.length === 2) return "Weekends";
+  return days.map((d) => DAY_FULL[d]).join(", ");
 }
 
 export default function AlarmCard() {
@@ -90,6 +114,7 @@ export default function AlarmCard() {
       const body = {
         enabled: patch.enabled ?? alarm.enabled,
         time: patch.time ?? alarm.time,
+        days: patch.days !== undefined ? patch.days : alarm.days,
         playlist_uri: patch.playlist_uri !== undefined ? patch.playlist_uri : alarm.playlist_uri,
       };
       const res = await apiFetch("/api/alarm", {
@@ -117,6 +142,17 @@ export default function AlarmCard() {
     if (!alarm) return;
     setAlarm((prev) => (prev ? { ...prev, time } : prev));
     updateAlarm({ time });
+  };
+
+  const handleDayToggle = (day) => {
+    if (!alarm || saving) return;
+    const current = alarm.days || ALL_DAYS;
+    const next = current.includes(day)
+      ? current.filter((d) => d !== day)
+      : [...current, day].sort((a, b) => ALL_DAYS.indexOf(a) - ALL_DAYS.indexOf(b));
+    if (next.length === 0) return;
+    setAlarm((prev) => (prev ? { ...prev, days: next } : prev));
+    updateAlarm({ days: next });
   };
 
   const handlePlaylistChange = (e) => {
@@ -155,7 +191,7 @@ export default function AlarmCard() {
     );
   }
 
-  const nextLabel = formatNextAlarm(alarm.enabled, alarm.time);
+  const nextLabel = formatNextAlarm(alarm.enabled, alarm.time, alarm.days);
 
   return (
     <section className="card alarm">
@@ -204,6 +240,29 @@ export default function AlarmCard() {
           disabled={saving}
           aria-label="Alarm time"
         />
+      </div>
+
+      <div className="alarm__days-row">
+        <span className="alarm__label">Repeat</span>
+        <div className="alarm__days">
+          {ALL_DAYS.map((day) => {
+            const active = (alarm.days || ALL_DAYS).includes(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                className={`alarm__day ${active ? "alarm__day--active" : ""}`}
+                onClick={() => handleDayToggle(day)}
+                disabled={saving}
+                aria-label={DAY_FULL[day]}
+                aria-pressed={active}
+              >
+                {DAY_LABELS[day]}
+              </button>
+            );
+          })}
+        </div>
+        <span className="alarm__days-summary">{describeDays(alarm.days)}</span>
       </div>
 
       {nextLabel && (

@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "alarm.json": {
         "enabled": False,
         "time": "07:00",
+        "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
         "playlist_uri": None,
     },
     "spotify.json": {

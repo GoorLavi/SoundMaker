@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Cookie, Depends, FastAPI, Request
+from fastapi import Body, Cookie, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -270,6 +270,33 @@ def spotify_playlists():
         return JSONResponse({"error": "Spotify not connected"}, status_code=400)
     playlists = spotify_auth.fetch_playlists()
     return {"playlists": playlists}
+
+
+class PlayNowRequest(BaseModel):
+    playlist_uri: Optional[str] = None
+
+
+@app.post("/api/spotify/play-now", dependencies=[Depends(require_auth)])
+def spotify_play_now(body: Optional[PlayNowRequest] = Body(None)):
+    """Start playback on SoundMaker device now (optional playlist_uri in body)."""
+    if not spotify_auth.is_connected():
+        return JSONResponse({"error": "Spotify not connected"}, status_code=400)
+    playlist_uri = body.playlist_uri if body else None
+    ok = spotify_auth.play_alarm_on_pi(playlist_uri=playlist_uri)
+    if not ok:
+        return JSONResponse({"error": "Could not start playback"}, status_code=502)
+    return {"ok": True}
+
+
+@app.post("/api/spotify/pause", dependencies=[Depends(require_auth)])
+def spotify_pause():
+    """Pause current Spotify playback."""
+    if not spotify_auth.is_connected():
+        return JSONResponse({"error": "Spotify not connected"}, status_code=400)
+    ok = spotify_auth.pause_now()
+    if not ok:
+        return JSONResponse({"error": "Could not pause"}, status_code=502)
+    return {"ok": True}
 
 
 @app.post("/api/spotify/disconnect", dependencies=[Depends(require_auth)])

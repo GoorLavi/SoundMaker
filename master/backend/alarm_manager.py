@@ -20,8 +20,14 @@ CHECK_INTERVAL_SEC = 60
 ALARM_FILENAME = "alarm.json"
 
 
+DEFAULT_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
 def get_alarm() -> dict[str, Any]:
-    return load(ALARM_FILENAME)
+    data = load(ALARM_FILENAME)
+    if "days" not in data or not data["days"]:
+        data["days"] = list(DEFAULT_DAYS)
+    return data
 
 
 VALID_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
@@ -34,11 +40,14 @@ def set_alarm(
     days: Optional[list[str]] = None,
     playlist_uri: Optional[str] = None,
 ) -> dict[str, Any]:
-    """time_str: HH:MM (24-hour). days: list of day abbreviations. playlist_uri can be None."""
+    """time_str: HH:MM (24-hour). days: list of day abbreviations (None = keep existing). playlist_uri can be None."""
     data = load(ALARM_FILENAME)
     data["enabled"] = bool(enabled)
     data["time"] = _normalize_time(time_str)
-    data["days"] = _normalize_days(days)
+    if days is not None:
+        data["days"] = _normalize_days(days)
+    elif "days" not in data or not data["days"]:
+        data["days"] = list(DEFAULT_DAYS)
     data["playlist_uri"] = playlist_uri.strip() or None if playlist_uri else None
     save(ALARM_FILENAME, data)
     return data

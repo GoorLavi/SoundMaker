@@ -245,6 +245,23 @@ def start_playback(
     return True
 
 
+def pause_playback(access_token: str) -> bool:
+    """PUT /me/player/pause — pause playback."""
+    resp = _api_put(access_token, "/me/player/pause")
+    if resp.status_code not in (200, 204):
+        logger.warning("Spotify pause failed: %s %s", resp.status_code, resp.text)
+        return False
+    return True
+
+
+def pause_now() -> bool:
+    """Get access token and pause playback. Returns True if paused successfully."""
+    token = _get_access_token()
+    if not token:
+        return False
+    return pause_playback(token)
+
+
 def play_alarm_on_pi(playlist_uri: Optional[str] = None) -> bool:
     """
     Get access token, find SoundMaker device, transfer playback and start playlist.

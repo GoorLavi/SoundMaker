@@ -158,10 +158,100 @@
   color: var(--text-muted);
 }
 
+.alarm__next-block {
+  margin-bottom: 16px;
+}
+
 .alarm__next {
   font-size: 0.9rem;
   color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.alarm__countdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+}
+
+.alarm__countdown-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--accent) calc(var(--progress, 0) * 360deg),
+    var(--border) 0
+  );
+  opacity: 0.9;
+}
+
+.alarm__countdown-ring::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.alarm__countdown-text {
+  position: relative;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.2;
+  max-width: 52px;
+  word-break: break-all;
+}
+
+.alarm__play-stop-row {
+  display: flex;
+  gap: 10px;
   margin-bottom: 16px;
+}
+
+.alarm__play-now-btn {
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--green);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: filter 0.15s, opacity 0.15s;
+}
+
+.alarm__play-now-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.alarm__stop-btn {
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.alarm__stop-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.alarm__play-now-btn:disabled,
+.alarm__stop-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .alarm__playlist-select {

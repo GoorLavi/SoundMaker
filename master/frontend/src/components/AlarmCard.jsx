@@ -9,7 +9,8 @@ const DAY_LABELS = { sun: "S", mon: "M", tue: "T", wed: "W", thu: "T", fri: "F",
 const DAY_FULL = { sun: "Sun", mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat" };
 const JS_TO_DAY = [/* 0=Sun */ "sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
-function formatNextAlarm(enabled, time, days) {
+/** Returns the next alarm Date or null. */
+function getNextAlarmDate(enabled, time, days) {
   if (!enabled || !time) return null;
   const activeDays = days && days.length > 0 ? days : ALL_DAYS;
   const [h, m] = time.split(":").map(Number);
@@ -19,15 +20,32 @@ function formatNextAlarm(enabled, time, days) {
     if (candidate <= now) continue;
     const dayAbbr = JS_TO_DAY[candidate.getDay()];
     if (!activeDays.includes(dayAbbr)) continue;
-    const isToday = candidate.toDateString() === now.toDateString();
-    const isTomorrow = offset === 1 || (offset === 0 && false);
-    const tomorrowCheck = new Date(now); tomorrowCheck.setDate(tomorrowCheck.getDate() + 1);
-    const timeStr = candidate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    if (isToday) return `Today at ${timeStr}`;
-    if (candidate.toDateString() === tomorrowCheck.toDateString()) return `Tomorrow at ${timeStr}`;
-    return `${DAY_FULL[dayAbbr]} at ${timeStr}`;
+    return candidate;
   }
   return null;
+}
+
+function formatNextAlarm(enabled, time, days) {
+  const date = getNextAlarmDate(enabled, time, days);
+  if (!date) return null;
+  const now = new Date();
+  const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (date.toDateString() === now.toDateString()) return `Today at ${timeStr}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (date.toDateString() === tomorrow.toDateString()) return `Tomorrow at ${timeStr}`;
+  return `${DAY_FULL[JS_TO_DAY[date.getDay()]]} at ${timeStr}`;
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return "Now";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function describeDays(days) {
@@ -45,7 +63,10 @@ export default function AlarmCard() {
   const [saving, setSaving] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [playAction, setPlayAction] = useState(null); // "play" | "pause" | null
   const intervalRef = useRef(null);
+  const countdownTotalRef = useRef(null);
 
   const fetchAlarm = useCallback(async () => {
     try {
@@ -93,6 +114,12 @@ export default function AlarmCard() {
     intervalRef.current = setInterval(fetchAll, POLL_INTERVAL);
     return () => clearInterval(intervalRef.current);
   }, [fetchAll]);
+
+  // Countdown tick every second
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (spotify?.connected) fetchPlaylists();
@@ -180,6 +207,36 @@ export default function AlarmCard() {
     }
   };
 
+  const handlePlayNow = async () => {
+    if (!spotify?.connected || playAction) return;
+    setPlayAction("play");
+    try {
+      const res = await apiFetch("/api/spotify/play-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playlist_uri: alarm?.playlist_uri || null }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      // could show toast
+    } finally {
+      setPlayAction(null);
+    }
+  };
+
+  const handleStop = async () => {
+    if (!spotify?.connected || playAction) return;
+    setPlayAction("pause");
+    try {
+      const res = await apiFetch("/api/spotify/pause", { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      // could show toast
+    } finally {
+      setPlayAction(null);
+    }
+  };
+
   if (alarm === null) {
     return (
       <section className="card alarm">
@@ -192,6 +249,17 @@ export default function AlarmCard() {
   }
 
   const nextLabel = formatNextAlarm(alarm.enabled, alarm.time, alarm.days);
+  const nextDate = getNextAlarmDate(alarm.enabled, alarm.time, alarm.days);
+  const countdownMs = nextDate ? Math.max(0, nextDate.getTime() - now) : null;
+  if (nextDate && countdownMs != null) {
+    if (countdownTotalRef.current == null) countdownTotalRef.current = countdownMs;
+    if (countdownMs > countdownTotalRef.current) countdownTotalRef.current = countdownMs;
+  } else {
+    countdownTotalRef.current = null;
+  }
+  const countdownProgress = countdownTotalRef.current && countdownMs != null
+    ? 1 - countdownMs / countdownTotalRef.current
+    : 0;
 
   return (
     <section className="card alarm">
@@ -266,9 +334,38 @@ export default function AlarmCard() {
       </div>
 
       {nextLabel && (
-        <p className="alarm__next" aria-live="polite">
-          Next: {nextLabel}
-        </p>
+        <div className="alarm__next-block" aria-live="polite">
+          <p className="alarm__next">Next: {nextLabel}</p>
+          {countdownMs !== null && (
+            <div className="alarm__countdown" aria-label={`Time until alarm: ${formatCountdown(countdownMs)}`}>
+              <span className="alarm__countdown-ring" style={{ ["--progress"]: countdownProgress }} />
+              <span className="alarm__countdown-text">{formatCountdown(countdownMs)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {spotify?.connected && (
+        <div className="alarm__play-stop-row">
+          <button
+            type="button"
+            className="alarm__play-now-btn"
+            onClick={handlePlayNow}
+            disabled={!!playAction}
+            aria-label="Play now on SoundMaker"
+          >
+            {playAction === "play" ? "…" : "Play now"}
+          </button>
+          <button
+            type="button"
+            className="alarm__stop-btn"
+            onClick={handleStop}
+            disabled={!!playAction}
+            aria-label="Stop playback"
+          >
+            {playAction === "pause" ? "…" : "Stop"}
+          </button>
+        </div>
       )}
 
       <div className="alarm__playlist-row">

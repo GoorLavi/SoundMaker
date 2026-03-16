@@ -9,6 +9,7 @@ A distributed home audio system built on Raspberry Pi. One **Master** receives a
 - Distributes synced audio to every room via [Snapcast](https://github.com/badaix/snapcast)
 - Provides a mobile-first **Web UI** for room control, volume, and source management
 - Runs **Pi-hole** for network-wide DNS ad blocking
+- Includes **Jellyfin** media server for streaming video content to smart TVs
 - Operates fully headless — no keyboard, mouse, or monitor
 
 ## Hardware
@@ -116,9 +117,10 @@ After installation, the Master exposes:
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Web UI | `http://master.local/` | Mobile-first dashboard (Pi-hole, System → Updates) |
+| Web UI | `http://master.local/` | Mobile-first dashboard (Pi-hole, Jellyfin, System → Updates) |
 | Backend API | `http://master.local/api/health` | REST API |
 | Pi-hole Admin | `http://master.local:8080/admin` | Ad-blocking management |
+| Jellyfin | `http://master.local:8096` | Media server for video streaming |
 | Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |  
 
 ## API Endpoints
@@ -137,6 +139,7 @@ After installation, the Master exposes:
 | POST | `/api/updates/check` | Yes | Check if a newer version exists on remote |
 | POST | `/api/updates/apply` | Yes | Start update (git pull, deps, migrations) |
 | GET | `/api/updates/progress` | Yes | Update progress log and result |
+| GET | `/api/jellyfin/status` | Yes | Jellyfin service status and URL |
 
 ## Remote Access (Tailscale VPN)
 
@@ -169,6 +172,35 @@ The Web UI will prompt for the password you set during installation. Bookmark th
 - Spotify Connect (requires local network for device discovery)
 - Bluetooth (requires physical proximity)
 
+## Jellyfin Media Server
+
+SoundMaker includes Jellyfin, an open-source media server for streaming movies and TV shows to any device on your network.
+
+### Setup
+
+1. **Access Jellyfin**: Navigate to `http://master.local:8096` in your browser
+2. **First-time setup**: Complete the setup wizard to create an admin account and configure libraries
+3. **Add media**: 
+   - Connect a USB drive with your media files to the Raspberry Pi
+   - Mount it (e.g., `sudo mount /dev/sda1 /media/movies`)
+   - In Jellyfin, add a library pointing to your media location (e.g., `/media/movies`)
+4. **Install client apps**: Download Jellyfin apps for your smart TV, phone, or tablet from [jellyfin.org](https://jellyfin.org/downloads/)
+
+### Accessing from Smart TV
+
+Most smart TV platforms have native Jellyfin apps:
+- **Roku**: Install from Roku Channel Store
+- **Fire TV**: Install from Amazon App Store
+- **Apple TV**: Install from App Store
+- **Android TV/Google TV**: Install from Play Store
+- **Samsung/LG**: Use the web browser or check for native apps
+
+Your TV and the Master Pi must be on the same local network. The TV app will auto-discover the Jellyfin server.
+
+### Remote Access
+
+Jellyfin is accessible remotely via Tailscale VPN at `http://master.<tailnet>:8096`. Note that streaming over VPN may be slow depending on your upload bandwidth.
+
 ## Network Setup
 
 For Pi-hole to block ads network-wide, configure your router's DHCP server to hand out the Master's IP as the DNS server:
@@ -186,7 +218,7 @@ Also reserve a static IP for the Master in your router's DHCP settings so the DN
 - 2.4GHz WiFi available (Pi Zero 2 W only supports 2.4GHz)
 - mDNS / Avahi for `.local` hostname resolution
 - Static IP reservation for Master on the router
-- Open TCP ports on Master: 80, 1704, 1705, 8080, 53
+- Open TCP ports on Master: 80, 1704, 1705, 8080, 8096, 53
 
 ## Architecture
 

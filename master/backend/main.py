@@ -37,6 +37,7 @@ from update_manager import (
     start_apply,
 )
 import spotify_auth
+import jellyfin_manager
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +305,16 @@ def spotify_disconnect():
     """Remove stored Spotify refresh token."""
     spotify_auth.disconnect()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Jellyfin media server (protected, read-only status)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/jellyfin/status", dependencies=[Depends(require_auth)])
+def jellyfin_status():
+    """Jellyfin service status and URL for the UI."""
+    return jellyfin_manager.get_status()
 
 
 # ---------------------------------------------------------------------------

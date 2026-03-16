@@ -210,7 +210,38 @@ install_raspotify() {
 install_raspotify
 
 # ---------------------------------------------------------------------------
-# 6. Python backend
+# 6. Jellyfin (media server)
+# ---------------------------------------------------------------------------
+
+install_jellyfin() {
+    if command -v jellyfin &> /dev/null || systemctl list-unit-files | grep -q jellyfin; then
+        info "Jellyfin is already installed, skipping."
+    else
+        info "Installing Jellyfin media server..."
+        
+        # Add Jellyfin repository
+        curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /usr/share/keyrings/jellyfin-archive-keyring.gpg 2>/dev/null
+        
+        # Determine Debian/Ubuntu codename
+        local codename
+        codename=$(lsb_release -c -s 2>/dev/null || echo "bookworm")
+        
+        echo "deb [signed-by=/usr/share/keyrings/jellyfin-archive-keyring.gpg arch=$(dpkg --print-architecture)] https://repo.jellyfin.org/debian $codename main" | tee /etc/apt/sources.list.d/jellyfin.list > /dev/null
+        
+        apt-get update -qq
+        apt-get install -y -qq jellyfin > /dev/null
+    fi
+    
+    systemctl enable jellyfin
+    systemctl start jellyfin
+    
+    info "Jellyfin installed — web UI at http://$(hostname).local:8096"
+}
+
+install_jellyfin
+
+# ---------------------------------------------------------------------------
+# 7. Python backend
 # ---------------------------------------------------------------------------
 
 setup_backend() {
@@ -263,7 +294,7 @@ ENVEOF
 setup_backend
 
 # ---------------------------------------------------------------------------
-# 7. systemd service for the SoundMaker backend
+# 8. systemd service for the SoundMaker backend
 # ---------------------------------------------------------------------------
 
 install_service() {
@@ -313,6 +344,7 @@ info ""
 info " Web UI (HTTPS): https://$domain"
 info " Web UI (local): http://$(hostname).local:8081"
 info " Pi-hole admin:  http://$(hostname).local:8080/admin"
+info " Jellyfin:       http://$(hostname).local:8096"
 info " Backend API:    http://127.0.0.1:8081/api/health"
 info ""
 info " Spotify OAuth redirect URI (add to Spotify Dashboard):"

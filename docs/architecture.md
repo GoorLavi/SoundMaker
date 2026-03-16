@@ -15,11 +15,11 @@ SoundMaker is a distributed home audio system built on Raspberry Pi hardware. A 
 - Distributes synced audio to every room via Snapcast
 - Provides a mobile-first Web UI for room control, volume, and source management
 - Runs Pi-hole for network-wide DNS ad blocking
+- Includes Jellyfin media server for video streaming (independent service)
 - Operates fully headless — no keyboard, mouse, or monitor required
 
 ### What SoundMaker Does NOT Do
 
-- Video playback
 - Per-room independent audio sources (all rooms play the same thing)
 - AirPlay (replaced by Bluetooth + Spotify Connect)
 - Complex DSP or room calibration
@@ -214,6 +214,7 @@ The Master runs the following services, all managed by systemd:
 | Backend API           | Python + FastAPI          | REST API on :8081, behind Caddy                 |
 | Web UI                | React (static files)     | Mobile-first SPA served by FastAPI              |
 | Pi-hole               | Pi-hole                  | DNS-level ad blocking for the whole network     |
+| Jellyfin              | Jellyfin                 | Media server for video streaming (:8096)        |
 
 ### Service Dependency Order
 
@@ -225,6 +226,7 @@ network-online
     ├── snapserver
     ├── bluetoothd (BlueZ)
     ├── raspotify
+    ├── jellyfin (:8096)
     └── pihole-FTL
             │
             ▼
@@ -274,7 +276,26 @@ During development, `npm run dev` runs Vite's dev server with a proxy to the bac
 
 #### Navigation (implemented)
 
-- **Top-level tabs** — **Dashboard** (Pi-hole and future audio/room controls) and **System** (System Health + Updates). Mobile-first tab bar below the header.
+- **Top-level tabs** — **Dashboard** (Alarm, Jellyfin, Pi-hole) and **System** (System Health + Updates). Mobile-first tab bar below the header.
+
+#### Alarm / Morning Wake-up (implemented)
+
+- Shown on the **Dashboard** tab.
+- **Time picker** — set alarm time (HH:MM)
+- **Enable/disable toggle** — turns alarm on/off
+- **Spotify connection** — OAuth flow to connect Spotify account; shows connection status
+- **Playlist selector** — choose which Spotify playlist to play at alarm time
+- **Next alarm summary** — displays when the next alarm will trigger
+
+#### Jellyfin Media Server (implemented)
+
+- Shown on the **Dashboard** tab.
+- **Status badge** — "running" (green), "stopped" (red), or "not installed" (gray)
+- **Description** — brief explanation of Jellyfin's purpose
+- **Open Jellyfin button** — opens Jellyfin web UI at `http://master.local:8096` in a new tab
+- **Warning message** — if service is stopped, shows command to restart it
+- **Polling** — refreshes status every 30 seconds
+- **Read-only** — SoundMaker does not control Jellyfin; it only reports service status
 
 #### Pi-hole (implemented)
 
@@ -318,6 +339,7 @@ During development, `npm run dev` runs Vite's dev server with a proxy to the bac
 | Browser → Master (UI)         | HTTPS via Caddy          | 443   | React SPA + FastAPI REST API         |
 | Browser → Master (HTTP→HTTPS) | HTTP redirect            | 80    | Caddy redirects to HTTPS             |
 | Caddy → Backend (internal)    | HTTP                     | 8081  | Reverse proxy to FastAPI             |
+| Browser → Master (Jellyfin)   | HTTP                     | 8096  | Jellyfin web UI and media streaming  |
 | Remote device → Master (VPN)  | Tailscale (WireGuard)    | —     | Encrypted tunnel for remote access   |
 | Phone → Master (Spotify)      | Spotify Connect (WiFi)   | —     | Handled by raspotify/librespot       |
 | Phone → Master (Bluetooth)    | Bluetooth A2DP           | —     | Handled by BlueZ                     |
@@ -608,6 +630,7 @@ SoundMaker/
 │   │   ├── bluetooth_manager.py # BlueZ D-Bus control
 │   │   ├── snapcast_api.py      # Snapcast JSON-RPC client
 │   │   ├── pihole_api.py        # Pi-hole v6 REST API client
+│   │   ├── jellyfin_manager.py  # Jellyfin service status checker
 │   │   ├── state_manager.py     # JSON state persistence
 │   │   ├── system_info.py       # Master system info (CPU, memory, temp, storage, network, OS)
 │   │   ├── update_manager.py    # Self-update: version check, apply, migrations
@@ -620,8 +643,9 @@ SoundMaker/
 │   │   │   ├── api.js           # Shared fetch wrapper (401 handling)
 │   │   │   └── components/
 │   │   │       ├── LoginScreen.jsx  # Login form
-│   │   │       ├── PiholeCard.jsx
-│   │   │       ├── AlarmCard.jsx  # Dashboard: morning wake-up (time, toggle, playlist, Spotify connect)
+│   │   │       ├── AlarmCard.jsx    # Dashboard: morning wake-up (time, toggle, playlist, Spotify connect)
+│   │   │       ├── JellyfinCard.jsx # Dashboard: Jellyfin media server status and link
+│   │   │       ├── PiholeCard.jsx   # Dashboard: Pi-hole status, toggle, stats
 │   │   │       ├── SystemHealthCard.jsx  # System tab: health dashboard
 │   │   │       └── UpdatesCard.jsx  # System tab: Updates
 │   │   ├── index.html
@@ -632,7 +656,9 @@ SoundMaker/
 │   ├── migrations/              # Versioned one-time scripts (run during Apply update)
 │   │   ├── 001_initial.sh
 │   │   ├── 002_caddy_spotify_alarm.sh  # Caddy HTTPS, alarm (prints re-run instructions)
-│   │   └── 003_raspotify.sh            # Install and enable raspotify (Spotify Connect device)
+│   │   ├── 003_raspotify.sh            # Install and enable raspotify (Spotify Connect device)
+│   │   ├── 004_raspotify_config.sh     # Fix raspotify config (HDMI output)
+│   │   └── 005_jellyfin.sh             # Install Jellyfin media server
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -1006,7 +1032,64 @@ When Phases 3–8 (PulseAudio, Snapcast, rooms, radio, source manager) are imple
 
 ---
 
-## 23. Future Possibilities (Out of Scope Now)
+## 23. Jellyfin Media Server
+
+SoundMaker includes **Jellyfin**, an open-source media server for streaming video content to smart TVs, phones, tablets, and web browsers.
+
+### Architecture
+
+Jellyfin runs as a **completely independent service** (`jellyfin.service`) on the Raspberry Pi 5 Master. It has no integration with SoundMaker's audio pipeline, state management, or control logic. The only connection is a **status widget** in the SoundMaker Dashboard that shows whether Jellyfin is running and provides a quick link to open Jellyfin's web interface.
+
+### Service Details
+
+| Aspect             | Detail                                                   |
+| ------------------ | -------------------------------------------------------- |
+| Service            | `jellyfin.service` (systemd)                             |
+| Web UI             | `http://master.local:8096`                               |
+| Installation       | Official Jellyfin Debian repository                      |
+| Configuration      | Managed entirely through Jellyfin's own web interface    |
+| Media libraries    | User configures in Jellyfin (e.g., USB drive with videos)|
+| Database           | SQLite, managed by Jellyfin                              |
+| Transcoding        | Handled by Jellyfin (CPU-intensive on Pi 5)              |
+
+### SoundMaker Integration (Minimal)
+
+SoundMaker's backend provides a **read-only status check**:
+
+| Component               | Behavior                                                |
+| ----------------------- | ------------------------------------------------------- |
+| `jellyfin_manager.py`   | Runs `systemctl is-active jellyfin.service` to check status |
+| `GET /api/jellyfin/status` | Returns `{"installed": bool, "running": bool, "url": str}` |
+| `JellyfinCard.jsx`      | Dashboard widget: status badge, description, "Open Jellyfin" link |
+
+SoundMaker **does not**:
+- Control Jellyfin's service state (start/stop)
+- Interact with Jellyfin's API
+- Manage media libraries or user accounts
+- Configure transcoding or playback settings
+
+### Client Access
+
+Users access Jellyfin **directly**:
+- **Web browser**: `http://master.local:8096`
+- **Smart TV apps**: Install Jellyfin app from Roku/Fire TV/Apple TV/Android TV app stores
+- **Mobile apps**: Install Jellyfin app from iOS/Android app stores
+- **Remote (via Tailscale VPN)**: `http://master.<tailnet>:8096`
+
+### Media Storage
+
+Users mount a USB drive (e.g., `/media/tv-shows/`) and point Jellyfin's library configuration to that directory. Jellyfin indexes the media, fetches metadata (posters, descriptions, episode info), and streams to clients.
+
+### Transcoding Considerations
+
+The Raspberry Pi 5 (8GB) can handle Jellyfin but transcoding is **CPU-intensive**. For best performance:
+- Use video formats natively supported by client devices (H.264/H.265 in MP4/MKV containers)
+- Enable **direct play** whenever possible (no transcoding)
+- Avoid 4K transcoding (Pi 5 will struggle)
+
+---
+
+## 24. Future Possibilities (Out of Scope Now)
 
 These are not planned but the architecture supports them:
 

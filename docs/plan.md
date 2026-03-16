@@ -166,6 +166,28 @@ Alarm at a set time: Pi plays a Spotify playlist over HDMI to the JBL soundbar. 
 
 ---
 
+## Phase 2.9: Jellyfin Media Server
+> **Status: DONE**
+
+### Backend
+- [x] Create `jellyfin_manager.py` — read-only status check (systemctl is-active)
+- [x] Add API endpoint: `GET /api/jellyfin/status` (protected) — returns installed, running, url
+
+### Frontend — Dashboard
+- [x] Create `JellyfinCard.jsx` — status widget with link to Jellyfin web UI
+- [x] Add to Dashboard tab in `App.jsx`
+
+### Installation
+- [x] Add Jellyfin installation section to `install_master.sh` (official Jellyfin Debian repo)
+- [x] Create migration `005_jellyfin.sh` for existing deployments
+
+### Documentation
+- [x] Update `README.md` — services table, Jellyfin setup section, network ports
+- [x] Update `plan.md` — Phase 2.9
+- [x] Update `architecture.md` — services table, Jellyfin section
+
+---
+
 ## Phase 3: PulseAudio + Snapcast
 > **Status: TODO**
 

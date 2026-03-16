@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { setOnAuthLost } from "./api";
 import AlarmCard from "./components/AlarmCard";
+import JellyfinCard from "./components/JellyfinCard";
 import PiholeCard from "./components/PiholeCard";
 import SystemHealthCard from "./components/SystemHealthCard";
 import UpdatesCard from "./components/UpdatesCard";
@@ -66,6 +67,7 @@ export default function App() {
         {activeTab === TAB_DASHBOARD && (
           <>
             <AlarmCard />
+            <JellyfinCard />
             <PiholeCard />
           </>
         )}

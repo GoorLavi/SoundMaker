@@ -197,6 +197,12 @@ Most smart TV platforms have native Jellyfin apps:
 
 Your TV and the Master Pi must be on the same local network. The TV app will auto-discover the Jellyfin server.
 
+> **Use the apps, not a web browser.** When a device can play a file as-is ("direct play"), the Pi just sends the file and stays cool. When it can't, the Pi has to **transcode** (rewrite the video on the fly with `ffmpeg`), which pegs the CPU and overheats the Pi 5 — the most common cause of it crashing. The native Jellyfin apps on phones and streaming boxes (Apple TV, Nvidia Shield, Fire TV, Google TV) direct-play almost everything; web browsers and forced/burned-in subtitles are what trigger transcoding.
+
+### Thermal Protection
+
+To stop a runaway transcode from overheating and crashing the Pi, the installer caps Jellyfin's CPU usage to 2 of the 4 cores (a systemd drop-in at `/etc/systemd/system/jellyfin.service.d/10-cpu-limit.conf`). This is applied automatically on fresh installs and by migration `006_jellyfin_cpu_limit.sh` on existing ones. See `docs/architecture.md` → *Jellyfin → Thermal Protection* for tuning.
+
 ### Remote Access
 
 Jellyfin is accessible remotely via Tailscale VPN at `http://master.<tailnet>:8096`. Note that streaming over VPN may be slow depending on your upload bandwidth.

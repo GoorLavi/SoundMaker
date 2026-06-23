@@ -180,11 +180,13 @@ Alarm at a set time: Pi plays a Spotify playlist over HDMI to the JBL soundbar. 
 ### Installation
 - [x] Add Jellyfin installation section to `install_master.sh` (official Jellyfin Debian repo)
 - [x] Create migration `005_jellyfin.sh` for existing deployments
+- [x] Cap Jellyfin CPU in `install_master.sh` (systemd drop-in, Pi 5 thermal protection)
+- [x] Create migration `006_jellyfin_cpu_limit.sh` for existing deployments
 
 ### Documentation
 - [x] Update `README.md` — services table, Jellyfin setup section, network ports
 - [x] Update `plan.md` — Phase 2.9
-- [x] Update `architecture.md` — services table, Jellyfin section
+- [x] Update `architecture.md` — services table, Jellyfin section, thermal-protection / CPU-limit section
 
 ---
 

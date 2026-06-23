@@ -658,7 +658,8 @@ SoundMaker/
 │   │   ├── 002_caddy_spotify_alarm.sh  # Caddy HTTPS, alarm (prints re-run instructions)
 │   │   ├── 003_raspotify.sh            # Install and enable raspotify (Spotify Connect device)
 │   │   ├── 004_raspotify_config.sh     # Fix raspotify config (HDMI output)
-│   │   └── 005_jellyfin.sh             # Install Jellyfin media server
+│   │   ├── 005_jellyfin.sh             # Install Jellyfin media server
+│   │   └── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -1051,6 +1052,25 @@ Jellyfin runs as a **completely independent service** (`jellyfin.service`) on th
 | Media libraries    | User configures in Jellyfin (e.g., USB drive with videos)|
 | Database           | SQLite, managed by Jellyfin                              |
 | Transcoding        | Handled by Jellyfin (CPU-intensive on Pi 5)              |
+| CPU limit          | Capped to 2 of 4 cores via systemd drop-in (see below)  |
+
+### Thermal Protection (CPU Limit)
+
+Jellyfin transcodes video with `ffmpeg`, which is very CPU-intensive. On a Raspberry Pi 5 a transcode runs the CPU to ~84 °C (the board throttles to protect itself), and **stacked transcodes can peg all 4 cores and drive the SoC to its ~110 °C emergency-shutdown point — cutting power and causing an unclean reboot** (the next boot shows a filesystem journal recovery).
+
+To prevent this, the install ships a systemd drop-in at `/etc/systemd/system/jellyfin.service.d/10-cpu-limit.conf`:
+
+```ini
+[Service]
+CPUQuota=200%   # at most 2 of the 4 cores — blocks the multi-transcode runaway
+CPUWeight=50    # yields to Pi-hole DNS and the SoundMaker UI under load
+```
+
+A single transcode still plays fine (it uses one core, under the cap). To keep the Pi cooler even for a single stream, lower `CPUQuota` below `100%` — at the cost of possible buffering during heavy scenes.
+
+- **Fresh installs:** applied by `install_master.sh` (`install_jellyfin`).
+- **Existing deployments:** applied by migration `006_jellyfin_cpu_limit.sh`.
+- **The real fix is on the client side:** if viewers use the **Jellyfin app** on a phone or streaming box (Apple TV, Nvidia Shield, Fire TV, Google TV) instead of a web browser, the media **direct-plays** and the Pi never transcodes. Browsers and forced/burned-in subtitles are the main triggers for transcoding.
 
 ### SoundMaker Integration (Minimal)
 

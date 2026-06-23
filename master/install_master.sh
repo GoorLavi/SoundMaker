@@ -231,11 +231,28 @@ install_jellyfin() {
         apt-get update -qq
         apt-get install -y -qq jellyfin > /dev/null
     fi
-    
+
+    # Cap Jellyfin's CPU so video transcoding can't overheat and crash the Pi 5.
+    # The Pi 5 has 4 cores; stacked transcodes can peg all of them, drive the SoC
+    # to its ~110 °C emergency-shutdown point, and cut power (causing an unclean
+    # reboot). CPUQuota=200% limits Jellyfin to at most 2 cores; CPUWeight=50 makes
+    # it yield to DNS / the web UI under load. A single transcode still plays fine.
+    info "Applying Jellyfin CPU limit (thermal protection)..."
+    mkdir -p /etc/systemd/system/jellyfin.service.d
+    cat > /etc/systemd/system/jellyfin.service.d/10-cpu-limit.conf <<'CPUEOF'
+# Managed by SoundMaker install_master.sh — thermal protection for the Pi 5.
+# See docs/architecture.md (Jellyfin section). Adjust CPUQuota to trade
+# playback smoothness against peak temperature.
+[Service]
+CPUQuota=200%
+CPUWeight=50
+CPUEOF
+
+    systemctl daemon-reload
     systemctl enable jellyfin
-    systemctl start jellyfin
-    
-    info "Jellyfin installed — web UI at http://$(hostname).local:8096"
+    systemctl restart jellyfin
+
+    info "Jellyfin installed (CPU-limited) — web UI at http://$(hostname).local:8096"
 }
 
 install_jellyfin

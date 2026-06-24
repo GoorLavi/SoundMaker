@@ -257,6 +257,57 @@ CPUEOF
 
 install_jellyfin
 
+# Make the media drive writable by Jellyfin so trickplay thumbnail generation
+# succeeds instead of failing in a loop and overheating the Pi (see migration
+# 007). No-op if there's no exfat /media/content drive at install time — attach
+# the drive and re-run, or run the migration later.
+configure_media_permissions() {
+    local mount=/media/content
+    local fstab_line
+    fstab_line=$(awk -v m="$mount" '$1 !~ /^#/ && $2==m && $3=="exfat" {print; exit}' /etc/fstab 2>/dev/null || true)
+    if [[ -z "$fstab_line" ]]; then
+        info "No exfat $mount drive found — skipping media permissions (attach drive and re-run if needed)."
+        return
+    fi
+
+    local changed=0
+    if [[ "$fstab_line" != *"dmask=0002"* ]]; then
+        info "Making $mount group-writable for Jellyfin..."
+        cp /etc/fstab "/etc/fstab.bak.$(date +%Y%m%d%H%M%S)"
+        awk -v m="$mount" 'BEGIN{OFS=" "}
+            $1 !~ /^#/ && $2==m && $3=="exfat" {
+                if ($4 !~ /dmask=0002/) $4=$4",fmask=0002,dmask=0002";
+                print $1,$2,$3,$4,$5,$6; next
+            }
+            { print }' /etc/fstab > /etc/fstab.new && mv /etc/fstab.new /etc/fstab
+        changed=1
+    fi
+
+    local gid grp
+    gid=$(printf '%s\n' "$fstab_line" | grep -oE 'gid=[0-9]+' | head -1 | cut -d= -f2)
+    gid=${gid:-1000}
+    grp=$(getent group "$gid" | cut -d: -f1)
+    if [[ -n "$grp" ]] && ! id -nG jellyfin 2>/dev/null | tr ' ' '\n' | grep -qx "$grp"; then
+        info "Adding jellyfin to group '$grp' for media write access..."
+        usermod -aG "$grp" jellyfin
+        changed=1
+    fi
+
+    if [[ "$changed" == 1 ]]; then
+        systemctl stop jellyfin || true
+        systemctl daemon-reload
+        if umount "$mount" 2>/dev/null; then
+            mount "$mount"
+        else
+            warn "$mount busy — new mount options apply on next reboot."
+        fi
+        systemctl start jellyfin
+        info "Media drive is now writable by Jellyfin."
+    fi
+}
+
+configure_media_permissions
+
 # ---------------------------------------------------------------------------
 # 7. Python backend
 # ---------------------------------------------------------------------------

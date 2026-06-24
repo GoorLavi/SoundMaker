@@ -203,6 +203,8 @@ Your TV and the Master Pi must be on the same local network. The TV app will aut
 
 To stop a runaway transcode from overheating and crashing the Pi, the installer caps Jellyfin's CPU usage to 2 of the 4 cores (a systemd drop-in at `/etc/systemd/system/jellyfin.service.d/10-cpu-limit.conf`). This is applied automatically on fresh installs and by migration `006_jellyfin_cpu_limit.sh` on existing ones. See `docs/architecture.md` → *Jellyfin → Thermal Protection* for tuning.
 
+The media drive is also mounted **writable by Jellyfin** (`fmask=0002,dmask=0002` in `/etc/fstab`, plus the `jellyfin` user added to the drive's group). Without this, Jellyfin's trickplay (scrubbing-preview) thumbnail generation fails on every file and loops the whole library, overheating the Pi for thumbnails it can never save. Applied by `install_master.sh` and migration `007_media_drive_writable.sh`.
+
 ### Remote Access
 
 Jellyfin is accessible remotely via Tailscale VPN at `http://master.<tailnet>:8096`. Note that streaming over VPN may be slow depending on your upload bandwidth.

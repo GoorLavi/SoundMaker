@@ -659,7 +659,8 @@ SoundMaker/
 │   │   ├── 003_raspotify.sh            # Install and enable raspotify (Spotify Connect device)
 │   │   ├── 004_raspotify_config.sh     # Fix raspotify config (HDMI output)
 │   │   ├── 005_jellyfin.sh             # Install Jellyfin media server
-│   │   └── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
+│   │   ├── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
+│   │   └── 007_media_drive_writable.sh # Make media drive writable (fixes trickplay loop)
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -1071,6 +1072,20 @@ A single transcode still plays fine (it uses one core, under the cap). To keep t
 - **Fresh installs:** applied by `install_master.sh` (`install_jellyfin`).
 - **Existing deployments:** applied by migration `006_jellyfin_cpu_limit.sh`.
 - **The real fix is on the client side:** if viewers use the **Jellyfin app** on a phone or streaming box (Apple TV, Nvidia Shield, Fire TV, Google TV) instead of a web browser, the media **direct-plays** and the Pi never transcodes. Browsers and forced/burned-in subtitles are the main triggers for transcoding.
+
+#### Trickplay and the media drive (writable mount)
+
+Jellyfin's **trickplay** feature (scrubbing-preview thumbnails) decodes every media file with `ffmpeg` and writes the thumbnail images **next to the media**. The media is an **exfat USB drive** mounted at `/media/content`. By default exfat mounts owner-only-writable, so the `jellyfin` user can't write there — every trickplay write fails with *Permission denied*, but only **after** the file has been fully decoded. The "Generate Trickplay Images" task then loops the whole library, burning CPU on thumbnails it can never save (observed: a 7-hour failing run pinning the Pi at 84 °C).
+
+The fix makes the drive writable by Jellyfin:
+
+- `/etc/fstab` mounts `/media/content` with **`fmask=0002,dmask=0002`** (group-writable).
+- The **`jellyfin` user is added to the drive's group** (the `gid=` from the mount options).
+
+With write access, trickplay succeeds in one finite pass and then stays quiet.
+
+- **Fresh installs:** `install_master.sh` → `configure_media_permissions` (no-op if the drive isn't attached at install time).
+- **Existing deployments:** migration `007_media_drive_writable.sh`.
 
 ### SoundMaker Integration (Minimal)
 

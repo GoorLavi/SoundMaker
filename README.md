@@ -123,6 +123,18 @@ After installation, the Master exposes:
 | Jellyfin | `http://master.local:8096` | Media server for video streaming (disabled by default) |
 | Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |  
 
+## System Tab
+
+The Web UI's **System** tab is a read-only-plus-controls view of the Master itself:
+
+- **System Health** — live CPU, memory, temperature, storage, and network.
+- **History (24h)** — a graph of CPU temperature (with the 70 °C warning line), CPU load, and memory over the last day, so you can spot a thermal trend before it crashes the Pi. Sampled once a minute in the background.
+- **Logs** — recent logs for any core service (SoundMaker, Jellyfin, Pi-hole, Caddy, Spotify, Tailscale) right in the browser, colored by severity — no SSH needed.
+- **Power** — **Restart backend** (reloads just the app) and **Reboot Pi** buttons, plus an optional **weekly reboot** on a day/time you choose. This removes the usual "SSH in to restart after an update" step.
+- **Updates** — check for and apply updates (see below).
+
+Power controls need passwordless sudo scoped to exactly two commands and journal read access; both are set up automatically by the installer (and migration `008` for existing devices). See `docs/architecture.md` → *System Tab controls*.
+
 ## API Endpoints
 
 | Method | Endpoint | Auth | Description |
@@ -140,6 +152,14 @@ After installation, the Master exposes:
 | POST | `/api/updates/apply` | Yes | Start update (git pull, deps, migrations) |
 | GET | `/api/updates/progress` | Yes | Update progress log and result |
 | GET | `/api/jellyfin/status` | Yes | Jellyfin service status and URL |
+| GET | `/api/system/info` | Yes | Master health snapshot (CPU, memory, temp, storage, network, OS) |
+| GET | `/api/system/metrics-history` | Yes | Rolling 24h history of CPU temp, load, memory (for the graph) |
+| GET | `/api/system/logs/services` | Yes | Services whose logs can be viewed |
+| GET | `/api/system/logs?service=&lines=` | Yes | Recent journal entries for a whitelisted service |
+| POST | `/api/system/restart-service` | Yes | Restart the SoundMaker backend (no SSH) |
+| POST | `/api/system/reboot` | Yes | Reboot the whole Raspberry Pi |
+| GET | `/api/system/auto-reboot` | Yes | Scheduled weekly reboot config |
+| PUT | `/api/system/auto-reboot` | Yes | Set scheduled weekly reboot (day, time, on/off) |
 
 ## Remote Access (Tailscale VPN)
 

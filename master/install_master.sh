@@ -260,7 +260,43 @@ CPUEOF
 install_jellyfin
 
 # ---------------------------------------------------------------------------
-# 7. Python backend
+# 7. Power controls + log access
+# ---------------------------------------------------------------------------
+
+# Lets the backend (a) read the systemd journal for the Web UI log viewer and
+# (b) restart itself / reboot the Pi from the Web UI — and nothing else. The
+# restart/reboot use `systemd-run` so the action runs as a transient timer,
+# outside the backend's own service group, and survives the restart.
+install_power_permissions() {
+    local run_user="${SUDO_USER:-pi}"
+    info "Configuring power controls and log access for '$run_user'..."
+
+    # Read the journal without sudo (applies on next service start).
+    usermod -aG systemd-journal "$run_user" 2>/dev/null || \
+        warn "Could not add $run_user to the systemd-journal group (log viewer may be empty)."
+
+    local sudoers_file="/etc/sudoers.d/soundmaker"
+    cat > "$sudoers_file" <<SUDOEOF
+# Managed by SoundMaker install_master.sh.
+# Allows the backend to restart itself and reboot the Pi from the Web UI, and
+# nothing else. systemd-run schedules the action as a transient timer so it
+# survives the backend being restarted.
+$run_user ALL=(root) NOPASSWD: /usr/bin/systemd-run --on-active=2 systemctl restart soundmaker-backend.service, /usr/bin/systemd-run --on-active=2 systemctl reboot
+SUDOEOF
+    chmod 440 "$sudoers_file"
+
+    if visudo -cf "$sudoers_file" > /dev/null 2>&1; then
+        info "Power controls enabled (restart / reboot from the Web UI)."
+    else
+        error "Generated sudoers file is invalid — removing it. Restart/reboot buttons will not work."
+        rm -f "$sudoers_file"
+    fi
+}
+
+install_power_permissions
+
+# ---------------------------------------------------------------------------
+# 8. Python backend
 # ---------------------------------------------------------------------------
 
 setup_backend() {
@@ -313,7 +349,7 @@ ENVEOF
 setup_backend
 
 # ---------------------------------------------------------------------------
-# 8. systemd service for the SoundMaker backend
+# 9. systemd service for the SoundMaker backend
 # ---------------------------------------------------------------------------
 
 install_service() {

@@ -38,6 +38,9 @@ from update_manager import (
 )
 import spotify_auth
 import jellyfin_manager
+import power_manager
+import metrics_history
+import system_logs
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +51,13 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     start_scheduler()
+    power_manager.start_scheduler()
+    metrics_history.start_sampler()
     try:
         yield
     finally:
+        metrics_history.stop_sampler()
+        power_manager.stop_scheduler()
         stop_scheduler()
         await pihole_api.close()
 
@@ -158,6 +165,62 @@ async def pihole_disable(timer: Optional[int] = None):
 def system_info():
     """Master device system information for the System tab (CPU, memory, temp, storage, network, OS, app)."""
     return get_system_info()
+
+
+@app.get("/api/system/metrics-history", dependencies=[Depends(require_auth)])
+def system_metrics_history():
+    """Rolling 24h history of CPU temperature, CPU load, and memory use (for the System tab graph)."""
+    return metrics_history.get_history()
+
+
+@app.get("/api/system/logs/services", dependencies=[Depends(require_auth)])
+def system_logs_services():
+    """List the services whose logs can be viewed."""
+    return {"services": system_logs.available_services()}
+
+
+@app.get("/api/system/logs", dependencies=[Depends(require_auth)])
+def system_logs_get(service: str = "backend", lines: int = 100):
+    """Recent journal log entries for a whitelisted service."""
+    return system_logs.get_logs(service, lines)
+
+
+# ---------------------------------------------------------------------------
+# Power controls (protected): restart backend, reboot Pi, weekly auto-reboot
+# ---------------------------------------------------------------------------
+
+@app.post("/api/system/restart-service", dependencies=[Depends(require_auth)])
+def system_restart_service():
+    """Restart the SoundMaker backend service (no SSH needed)."""
+    if not power_manager.restart_backend():
+        return JSONResponse({"error": "Could not restart backend"}, status_code=500)
+    return {"ok": True, "message": "Backend restarting…"}
+
+
+@app.post("/api/system/reboot", dependencies=[Depends(require_auth)])
+def system_reboot():
+    """Reboot the whole Raspberry Pi."""
+    if not power_manager.reboot():
+        return JSONResponse({"error": "Could not reboot"}, status_code=500)
+    return {"ok": True, "message": "Rebooting…"}
+
+
+@app.get("/api/system/auto-reboot", dependencies=[Depends(require_auth)])
+def system_auto_reboot_get():
+    """Current scheduled weekly reboot config: enabled, day, time."""
+    return power_manager.get_auto_reboot()
+
+
+class AutoRebootUpdate(BaseModel):
+    enabled: bool = False
+    day: str = "sun"
+    time: str = "04:30"
+
+
+@app.put("/api/system/auto-reboot", dependencies=[Depends(require_auth)])
+def system_auto_reboot_put(body: AutoRebootUpdate):
+    """Set the scheduled weekly reboot (day + time, on/off)."""
+    return power_manager.set_auto_reboot(body.enabled, body.day, body.time)
 
 
 # ---------------------------------------------------------------------------

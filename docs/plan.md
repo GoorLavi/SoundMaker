@@ -192,6 +192,32 @@ Alarm at a set time: Pi plays a Spotify playlist over HDMI to the JBL soundbar. 
 
 ---
 
+## Phase 2.10: Power controls, vitals history, log viewer
+> **Status: DONE**
+
+Three System-tab conveniences for a headless box: restart/reboot without SSH, a 24-hour vitals graph, and an in-UI journal log viewer.
+
+### Backend
+- [x] `power_manager.py` — restart backend / reboot Pi via `systemd-run --on-active=2` (transient timer survives the restart); weekly-reboot config (`state/power.json`) + minute scheduler
+- [x] `metrics_history.py` — background sampler (1/min) of CPU temperature, CPU load, memory %, kept 24h in memory, persisted to `state/metrics_history.json` every ~5 min to limit SD-card wear
+- [x] `system_logs.py` — read journald JSON for a whitelisted set of services (backend, Jellyfin, Pi-hole, Caddy, raspotify, Tailscale); service key never reaches the shell
+- [x] API: `GET /api/system/metrics-history`, `GET /api/system/logs`, `GET /api/system/logs/services`, `POST /api/system/restart-service`, `POST /api/system/reboot`, `GET/PUT /api/system/auto-reboot`
+- [x] Wire schedulers/sampler into app lifespan
+
+### Frontend — System tab
+- [x] `MetricsHistoryCard.jsx` — inline SVG line charts (temperature with 70 °C threshold line, CPU load, memory), no chart library
+- [x] `LogsCard.jsx` — service dropdown, line-count selector, refresh + auto-refresh, entries colored by severity, newest in view
+- [x] `PowerCard.jsx` — Restart backend + Reboot Pi buttons (with confirm), weekly-reboot schedule (day/time/on-off)
+
+### Installation
+- [x] `install_master.sh` → `install_power_permissions()` — add backend user to `systemd-journal`; write scoped `/etc/sudoers.d/soundmaker` (validated with `visudo -cf`)
+- [x] Migration `008_power_controls_log_access.sh` for existing deployments
+
+### Documentation
+- [x] Update `README.md` (services/endpoints, System tab), `docs/architecture.md` (new section, endpoints, state, structure), `docs/plan.md`
+
+---
+
 ## Phase 3: PulseAudio + Snapcast
 > **Status: TODO**
 

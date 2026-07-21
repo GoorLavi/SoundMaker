@@ -40,6 +40,13 @@ DEFAULTS: dict[str, Any] = {
     "spotify.json": {
         "refresh_token": None,
     },
+    "power.json": {
+        "auto_reboot": {
+            "enabled": False,
+            "day": "sun",
+            "time": "04:30",
+        },
+    },
 }
 
 

@@ -318,6 +318,9 @@ During development, `npm run dev` runs Vite's dev server with a proxy to the bac
   - **Network** — active interface (Ethernet / Wi-Fi), IP address, Wi-Fi SSID and signal (if applicable), internet connectivity status (OK / Offline)
   - **System** — OS version, uptime, hostname
   - **Application** — SoundMaker version (commit or tag), last update time
+- **History (24h)** card — inline SVG line graphs (no chart library) of CPU temperature (with a dashed 70 °C threshold line), CPU load (1-minute average), and memory used, over the last 24 hours. Backed by a once-a-minute background sampler; helps catch a thermal or memory trend before it crashes the Pi.
+- **Logs** card — recent systemd-journal entries for a whitelisted service (SoundMaker backend, Jellyfin, Pi-hole, Caddy, raspotify, Tailscale). Service dropdown, line-count selector, manual refresh and optional auto-refresh, entries colored by severity, newest kept in view. Read-only; no SSH needed.
+- **Power** card — **Restart backend** and **Reboot Pi** buttons (each behind a confirm dialog), plus an optional **weekly reboot** schedule (day + time, on/off). Removes the "SSH in to restart after an update" step.
 - **Updates** card — same as below; lives under the System tab.
 - Designed to be extendable later (e.g. audio, slaves, system actions).
 
@@ -459,6 +462,40 @@ Stores Spotify Web API OAuth refresh token so the backend can start playback at 
   "refresh_token": "AQC..."
 }
 ```
+
+### `state/power.json`
+
+Scheduled weekly-reboot config. Not committed to Git.
+
+```json
+{
+  "auto_reboot": {
+    "enabled": false,
+    "day": "sun",
+    "time": "04:30"
+  }
+}
+```
+
+- **enabled** — whether the weekly reboot is active
+- **day** — three-letter weekday (`mon`…`sun`)
+- **time** — local time HH:MM (24-hour)
+
+### `state/metrics_history.json`
+
+Rolling 24-hour history of Master vitals for the System-tab graph. Not committed to Git. Kept in memory and written to disk only every ~5 minutes (and on shutdown) to limit SD-card wear.
+
+```json
+{
+  "points": [
+    { "t": 1784663514, "temp_c": 52.1, "load": 0.34, "mem_pct": 41.2 }
+  ]
+}
+```
+
+- **t** — Unix timestamp (seconds)
+- **temp_c** — CPU temperature (°C), **load** — 1-minute load average, **mem_pct** — memory used (%)
+- At most `24 × 60 = 1440` points (one per minute for 24h)
 
 ### Where State Lives on Disk
 
@@ -633,6 +670,9 @@ SoundMaker/
 │   │   ├── jellyfin_manager.py  # Jellyfin service status checker
 │   │   ├── state_manager.py     # JSON state persistence
 │   │   ├── system_info.py       # Master system info (CPU, memory, temp, storage, network, OS)
+│   │   ├── metrics_history.py   # 24h vitals sampler (temp/load/memory) for the History graph
+│   │   ├── system_logs.py       # Read journald logs for whitelisted services (log viewer)
+│   │   ├── power_manager.py     # Restart backend / reboot Pi + weekly-reboot scheduler
 │   │   ├── update_manager.py    # Self-update: version check, apply, migrations
 │   │   └── requirements.txt     # Python dependencies
 │   │
@@ -647,6 +687,9 @@ SoundMaker/
 │   │   │       ├── JellyfinCard.jsx # Dashboard: Jellyfin media server status and link
 │   │   │       ├── PiholeCard.jsx   # Dashboard: Pi-hole status, toggle, stats
 │   │   │       ├── SystemHealthCard.jsx  # System tab: health dashboard
+│   │   │       ├── MetricsHistoryCard.jsx # System tab: 24h vitals graph (SVG)
+│   │   │       ├── LogsCard.jsx     # System tab: journal log viewer
+│   │   │       ├── PowerCard.jsx    # System tab: restart / reboot / weekly reboot
 │   │   │       └── UpdatesCard.jsx  # System tab: Updates
 │   │   ├── index.html
 │   │   ├── vite.config.js
@@ -660,7 +703,8 @@ SoundMaker/
 │   │   ├── 004_raspotify_config.sh     # Fix raspotify config (HDMI output)
 │   │   ├── 005_jellyfin.sh             # Install Jellyfin media server
 │   │   ├── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
-│   │   └── 007_disable_jellyfin.sh     # Disable Jellyfin by default
+│   │   ├── 007_disable_jellyfin.sh     # Disable Jellyfin by default
+│   │   └── 008_power_controls_log_access.sh  # sudoers + journal group for power/logs
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -814,6 +858,13 @@ The Master supports **manual self-update** from the Web UI. There is no automati
 | Method | Endpoint             | Purpose                                                       |
 | ------ | -------------------- | ------------------------------------------------------------- |
 | GET    | `/api/system/info`   | Master system info: CPU, memory, temperature, storage, network, OS, application (for System tab dashboard) |
+| GET    | `/api/system/metrics-history` | Rolling 24h history of CPU temperature, load, and memory (History graph) |
+| GET    | `/api/system/logs/services`   | List of services whose logs can be viewed                    |
+| GET    | `/api/system/logs`   | Recent journal entries for a whitelisted `service` (query: `service`, `lines`) |
+| POST   | `/api/system/restart-service` | Restart the SoundMaker backend (via `systemd-run`)          |
+| POST   | `/api/system/reboot` | Reboot the whole Pi (via `systemd-run`)                       |
+| GET    | `/api/system/auto-reboot`     | Current scheduled weekly-reboot config                       |
+| PUT    | `/api/system/auto-reboot`     | Set scheduled weekly reboot (enabled, day, time)             |
 
 ### Updates API Endpoints (all protected by auth)
 
@@ -1125,3 +1176,48 @@ These are not planned but the architecture supports them:
 - **Home automation hooks** — trigger events based on audio state
 - **Additional audio sources** — line-in, podcast feeds, TTS announcements
 - **EQ/DSP per room** — Snapcast supports per-client audio processing
+
+---
+
+## 25. System Tab controls (power, logs, vitals history)
+
+Three conveniences that make the headless Master manageable from the Web UI, without SSH.
+
+### Vitals history (24h graph)
+
+`metrics_history.py` runs a background task that samples CPU temperature, 1-minute load average, and memory-used percentage **once a minute**, reusing the read-only helpers in `system_info.py`. It keeps up to 1440 points (24h) in memory and returns them via `GET /api/system/metrics-history`. The `MetricsHistoryCard` draws them as inline SVG line charts — no chart library, keeping the frontend's dependency list at just React. The temperature chart draws a dashed line at the 70 °C warning threshold so a thermal creep is obvious.
+
+To avoid wearing the SD card, history is persisted to `state/metrics_history.json` only every ~5 samples and once on shutdown — not on every tick.
+
+### Log viewer
+
+`system_logs.py` exposes recent journal entries for a **fixed whitelist** of services (SoundMaker backend, Jellyfin, Pi-hole, Caddy, raspotify, Tailscale). The UI passes a short key (e.g. `backend`); the key selects a known unit name and is **never** interpolated into a shell command, so it can't be used for injection. Logs are read as journald JSON (`journalctl -o json`), so each entry carries a real severity (`PRIORITY`) and a clean message; the UI colors warnings and errors.
+
+The backend reads the journal as a member of the `systemd-journal` group (granted by the installer) — no sudo.
+
+### Power controls
+
+`power_manager.py` provides:
+
+- **Restart backend** — `POST /api/system/restart-service`
+- **Reboot Pi** — `POST /api/system/reboot`
+- **Weekly reboot** — `GET`/`PUT /api/system/auto-reboot`, config in `state/power.json`, fired by a minute-resolution scheduler (same pattern as the alarm).
+
+Both restart and reboot run via `sudo systemd-run --on-active=2 …`. Using `systemd-run` schedules the action as a **transient systemd timer** that runs *outside* the backend's own service group — so restarting the backend does not kill the command mid-flight, and the HTTP request returns before the action happens (a plain detached child would be killed when the service's control group is torn down).
+
+### Permissions (installed in code)
+
+Set up by `install_master.sh` → `install_power_permissions()` on fresh installs and migration `008_power_controls_log_access.sh` on existing ones:
+
+| Grant | Purpose | How |
+| ----- | ------- | --- |
+| `systemd-journal` group membership | Log viewer reads the journal | `usermod -aG systemd-journal <user>` |
+| Scoped passwordless sudo | Restart / reboot from the UI | `/etc/sudoers.d/soundmaker`, validated with `visudo -cf` |
+
+The sudoers file grants **only** the two exact `systemd-run` invocations — nothing else — so the backend cannot run arbitrary commands as root:
+
+```
+<user> ALL=(root) NOPASSWD: /usr/bin/systemd-run --on-active=2 systemctl restart soundmaker-backend.service, /usr/bin/systemd-run --on-active=2 systemctl reboot
+```
+
+Journal group membership takes effect the next time the backend service starts; the installer restarts it, and after an "Apply update" the user restarts the backend anyway (now possible from the **Power** card itself).

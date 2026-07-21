@@ -4,6 +4,9 @@ import AlarmCard from "./components/AlarmCard";
 import JellyfinCard from "./components/JellyfinCard";
 import PiholeCard from "./components/PiholeCard";
 import SystemHealthCard from "./components/SystemHealthCard";
+import MetricsHistoryCard from "./components/MetricsHistoryCard";
+import LogsCard from "./components/LogsCard";
+import PowerCard from "./components/PowerCard";
 import UpdatesCard from "./components/UpdatesCard";
 import LoginScreen from "./components/LoginScreen";
 import "./App.css";
@@ -74,6 +77,9 @@ export default function App() {
         {activeTab === TAB_SYSTEM && (
           <>
             <SystemHealthCard />
+            <MetricsHistoryCard />
+            <LogsCard />
+            <PowerCard />
             <UpdatesCard />
           </>
         )}

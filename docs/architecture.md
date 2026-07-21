@@ -659,7 +659,8 @@ SoundMaker/
 │   │   ├── 003_raspotify.sh            # Install and enable raspotify (Spotify Connect device)
 │   │   ├── 004_raspotify_config.sh     # Fix raspotify config (HDMI output)
 │   │   ├── 005_jellyfin.sh             # Install Jellyfin media server
-│   │   └── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
+│   │   ├── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
+│   │   └── 007_disable_jellyfin.sh     # Disable Jellyfin by default
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -1041,11 +1042,14 @@ SoundMaker includes **Jellyfin**, an open-source media server for streaming vide
 
 Jellyfin runs as a **completely independent service** (`jellyfin.service`) on the Raspberry Pi 5 Master. It has no integration with SoundMaker's audio pipeline, state management, or control logic. The only connection is a **status widget** in the SoundMaker Dashboard that shows whether Jellyfin is running and provides a quick link to open Jellyfin's web interface.
 
+**Disabled by default** — Jellyfin is installed but not started or enabled on boot, since media streaming is optional and competes with the Pi 5's limited CPU/thermal headroom. Enable it with `sudo systemctl enable --now jellyfin`; disable again with `sudo systemctl disable --now jellyfin`.
+
 ### Service Details
 
 | Aspect             | Detail                                                   |
 | ------------------ | -------------------------------------------------------- |
 | Service            | `jellyfin.service` (systemd)                             |
+| Default state      | Installed, disabled, stopped                             |
 | Web UI             | `http://master.local:8096`                               |
 | Installation       | Official Jellyfin Debian repository                      |
 | Configuration      | Managed entirely through Jellyfin's own web interface    |
@@ -1070,6 +1074,7 @@ A single transcode still plays fine (it uses one core, under the cap). To keep t
 
 - **Fresh installs:** applied by `install_master.sh` (`install_jellyfin`).
 - **Existing deployments:** applied by migration `006_jellyfin_cpu_limit.sh`.
+- **Disabling by default:** fresh installs via `install_master.sh`; existing deployments via migration `007_disable_jellyfin.sh`.
 - **The real fix is on the client side:** if viewers use the **Jellyfin app** on a phone or streaming box (Apple TV, Nvidia Shield, Fire TV, Google TV) instead of a web browser, the media **direct-plays** and the Pi never transcodes. Browsers and forced/burned-in subtitles are the main triggers for transcoding.
 
 ### SoundMaker Integration (Minimal)

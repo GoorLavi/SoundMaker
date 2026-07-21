@@ -249,10 +249,12 @@ CPUWeight=50
 CPUEOF
 
     systemctl daemon-reload
-    systemctl enable jellyfin
-    systemctl restart jellyfin
 
-    info "Jellyfin installed (CPU-limited) — web UI at http://$(hostname).local:8096"
+    # Disabled by default — media streaming is optional and the Pi 5 has limited
+    # headroom. Re-enable anytime with: sudo systemctl enable --now jellyfin
+    systemctl disable --now jellyfin 2>/dev/null || true
+
+    info "Jellyfin installed (CPU-limited, disabled by default) — enable with: sudo systemctl enable --now jellyfin"
 }
 
 install_jellyfin

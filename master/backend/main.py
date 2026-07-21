@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import Body, Cookie, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 from pydantic import BaseModel
 
 import pihole_api
@@ -384,5 +385,23 @@ def jellyfin_status():
 # Static frontend (only mounted if the build exists)
 # ---------------------------------------------------------------------------
 
+class SPAStaticFiles(StaticFiles):
+    """Serve built frontend, but tell clients never to cache the HTML shell.
+
+    The hashed JS/CSS under assets/ are safe to cache forever (their filenames
+    change every build). index.html must NOT be cached, or an installed
+    "Add to Home Screen" web app on iOS keeps launching a stale shell that
+    references old asset hashes and never picks up an update. `no-cache` forces
+    a cheap revalidation on every launch so new builds show up automatically.
+    """
+
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        content_type = response.headers.get("content-type", "")
+        if content_type.startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
 if FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    app.mount("/", SPAStaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

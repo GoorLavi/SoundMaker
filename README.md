@@ -120,7 +120,7 @@ After installation, the Master exposes:
 | Web UI | `http://master.local/` | Mobile-first dashboard (Pi-hole, Jellyfin, System → Updates) |
 | Backend API | `http://master.local/api/health` | REST API |
 | Pi-hole Admin | `http://master.local:8080/admin` | Ad-blocking management |
-| Jellyfin | `http://master.local:8096` | Media server for video streaming |
+| Jellyfin | `http://master.local:8096` | Media server for video streaming (disabled by default) |
 | Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |  
 
 ## API Endpoints
@@ -176,9 +176,12 @@ The Web UI will prompt for the password you set during installation. Bookmark th
 
 SoundMaker includes Jellyfin, an open-source media server for streaming movies and TV shows to any device on your network.
 
+> **Disabled by default.** Jellyfin is installed but not running out of the box — enable it with `sudo systemctl enable --now jellyfin` and disable it again with `sudo systemctl disable --now jellyfin`. The Dashboard's Media Server card shows its current status either way.
+
 ### Setup
 
-1. **Access Jellyfin**: Navigate to `http://master.local:8096` in your browser
+1. **Enable Jellyfin**: `sudo systemctl enable --now jellyfin` (skip if already running)
+2. **Access Jellyfin**: Navigate to `http://master.local:8096` in your browser
 2. **First-time setup**: Complete the setup wizard to create an admin account and configure libraries
 3. **Add media**: 
    - Connect a USB drive with your media files to the Raspberry Pi

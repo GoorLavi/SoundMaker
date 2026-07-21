@@ -182,6 +182,8 @@ Alarm at a set time: Pi plays a Spotify playlist over HDMI to the JBL soundbar. 
 - [x] Create migration `005_jellyfin.sh` for existing deployments
 - [x] Cap Jellyfin CPU in `install_master.sh` (systemd drop-in, Pi 5 thermal protection)
 - [x] Create migration `006_jellyfin_cpu_limit.sh` for existing deployments
+- [x] Disable Jellyfin by default (installed but not started/enabled) in `install_master.sh`
+- [x] Create migration `007_disable_jellyfin.sh` for existing deployments
 
 ### Documentation
 - [x] Update `README.md` — services table, Jellyfin setup section, network ports

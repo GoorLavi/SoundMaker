@@ -16,6 +16,7 @@ Exit node has two halves:
 
 import json
 import logging
+import shutil
 import subprocess
 from typing import Any, Optional
 
@@ -25,10 +26,20 @@ TIMEOUT_SEC = 10
 ADMIN_CONSOLE_URL = "https://login.tailscale.com/admin/machines"
 
 
-def _run(cmd: list[str]) -> Optional[str]:
+def _run(cmd: list[str], accept_failure: bool = False) -> Optional[str]:
+    """Run a tailscale command, returning stdout (or None on failure).
+
+    With accept_failure, stdout is returned even on a non-zero exit as long as
+    the command actually printed something. `tailscale status --json` exits
+    non-zero while logged out but still prints a valid status document — that
+    document is exactly what tells us the node needs login rather than being
+    missing.
+    """
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_SEC)
         if result.returncode == 0:
+            return result.stdout
+        if accept_failure and (result.stdout or "").strip():
             return result.stdout
         logger.warning("tailscale command failed %s: %s", cmd, (result.stderr or "").strip())
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
@@ -36,8 +47,12 @@ def _run(cmd: list[str]) -> Optional[str]:
     return None
 
 
+def _is_installed() -> bool:
+    return shutil.which("tailscale") is not None
+
+
 def _status_json() -> Optional[dict[str, Any]]:
-    out = _run(["tailscale", "status", "--json"])
+    out = _run(["tailscale", "status", "--json"], accept_failure=True)
     if not out:
         return None
     try:
@@ -64,7 +79,10 @@ def get_status() -> dict[str, Any]:
     """Tailscale connection + exit-node state for the System tab card."""
     status = _status_json()
     if status is None:
-        return {"installed": False, "running": False}
+        # No parseable status. Fall back to whether the binary exists at all, so
+        # an installed-but-broken tailscaled reads as "not connected" rather
+        # than "not installed".
+        return {"installed": _is_installed(), "running": False}
 
     self_info = status.get("Self") or {}
     backend_state = status.get("BackendState")  # "Running", "NeedsLogin", "Stopped", ...

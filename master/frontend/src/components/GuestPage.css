@@ -1,0 +1,129 @@
+/* Guest landing page — public, mobile-first, meant to be shown to visitors */
+
+.guest {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 40px 20px 48px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.guest__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.guest__wave {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.guest__title {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.guest__message {
+  font-size: 1rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 36ch;
+}
+
+.guest__section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.guest__wifi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+}
+
+/* White frame so the QR stays scannable on the dark theme */
+.guest__qr-frame {
+  display: inline-block;
+  background: #ffffff;
+  padding: 12px;
+  border-radius: 16px;
+  margin: 4px auto 12px;
+}
+
+.guest__qr {
+  display: block;
+  width: min(260px, 70vw);
+  height: auto;
+}
+
+.guest__hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.guest__details {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.guest__detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-hover);
+  border-radius: 10px;
+}
+
+.guest__detail dt {
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.guest__detail dd {
+  font-size: 0.95rem;
+  font-weight: 600;
+  word-break: break-all;
+  text-align: right;
+}
+
+.guest__password {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-weight: 600;
+  font-family: "SF Mono", "Monaco", "Consolas", monospace;
+  color: var(--text);
+}
+
+.guest__copy-hint {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.guest__extra {
+  padding: 0 8px;
+}
+
+.guest__unavailable {
+  padding: 80px 20px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}

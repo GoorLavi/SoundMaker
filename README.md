@@ -10,6 +10,8 @@ A distributed home audio system built on Raspberry Pi. One **Master** receives a
 - Provides a mobile-first **Web UI** for room control, volume, and source management
 - Runs **Pi-hole** for network-wide DNS ad blocking
 - Includes **Jellyfin** media server for streaming video content to smart TVs
+- Serves a public **guest landing page** (`/guest`) with a scan-to-join Wi-Fi QR code
+- Acts as a **Tailscale exit node** — route your phone's traffic through home while traveling (Pi-hole ad blocking everywhere)
 - Operates fully headless — no keyboard, mouse, or monitor
 
 ## Hardware
@@ -152,6 +154,11 @@ Power controls need passwordless sudo scoped to exactly two commands and journal
 | POST | `/api/updates/apply` | Yes | Start update (git pull, deps, migrations) |
 | GET | `/api/updates/progress` | Yes | Update progress log and result |
 | GET | `/api/jellyfin/status` | Yes | Jellyfin service status and URL |
+| GET | `/api/guest` | Yes | Guest page config (admin) |
+| PUT | `/api/guest` | Yes | Update guest page config |
+| GET | `/api/guest/page` | No | Guest-visible page data (empty while disabled) |
+| GET | `/api/tailscale/status` | Yes | Tailscale connection + exit-node state |
+| POST | `/api/tailscale/exit-node` | Yes | Advertise / stop advertising as exit node |
 | GET | `/api/system/info` | Yes | Master health snapshot (CPU, memory, temp, storage, network, OS) |
 | GET | `/api/system/metrics-history` | Yes | Rolling 24h history of CPU temp, load, memory (for the graph) |
 | GET | `/api/system/logs/services` | Yes | Services whose logs can be viewed |
@@ -171,7 +178,7 @@ SoundMaker includes [Tailscale](https://tailscale.com/) for secure remote access
 2. After installation, authenticate once:
 
 ```bash
-sudo tailscale up --ssh
+sudo tailscale up --ssh --operator=goorlavi
 ```
 
 3. Open the printed URL in a browser (or run `tailscale status` if nothing is printed) and log in with your Tailscale account.
@@ -191,6 +198,24 @@ The Web UI will prompt for the password you set during installation. Bookmark th
 
 - Spotify Connect (requires local network for device discovery)
 - Bluetooth (requires physical proximity)
+
+### Exit node — route your phone's traffic through home
+
+The Master can also act as a Tailscale **exit node**: while traveling, your phone sends *all* its internet traffic through your home connection. You get Pi-hole ad blocking everywhere, your home country's geo access, and safe browsing on hotel/airport Wi-Fi. (This is not a NordVPN-style anonymizer — traffic exits from your home IP, and speed is capped by your home upload bandwidth.)
+
+1. Enable it in the Web UI: **System → Tailscale VPN → Enable exit node**.
+2. Approve it once in the [Tailscale admin console](https://login.tailscale.com/admin/machines): Machines → your Master → Edit route settings → **Use as exit node**. The card shows "awaiting approval" until you do.
+3. On your phone: Tailscale app → **Exit node** → select the Master. Pick "None" to turn it off when back home.
+
+IP forwarding and CLI permissions are set up automatically by the installer (and migration `009` for existing devices). See `docs/architecture.md` → *Remote Access → Exit Node*.
+
+## Guest Landing Page
+
+A public welcome page at `http://master.local/guest` you can show visitors: a **Wi-Fi QR code** they scan with their camera to join your network, the password in tap-to-copy text, an optional welcome message, and a link to Jellyfin.
+
+- Configure and turn it on from **Dashboard → Guest Page** (SSID, password, security type, message).
+- The page needs **no login** — that's the point — but while it's turned **off** (the default) it reveals nothing.
+- Works for any Wi-Fi network you type in (it shows whatever SSID/password you configure, typically your guest network).
 
 ## Jellyfin Media Server
 

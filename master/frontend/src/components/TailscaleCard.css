@@ -1,0 +1,111 @@
+/* Tailscale VPN card */
+
+.tailscale__info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tailscale__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tailscale__label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tailscale__value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: "SF Mono", "Monaco", "Consolas", monospace;
+  word-break: break-all;
+  text-align: right;
+}
+
+.tailscale__exit {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.tailscale__exit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tailscale__exit-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tailscale__exit-description {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+
+.tailscale__toggle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.1);
+  transition: background 0.15s;
+}
+
+.tailscale__toggle:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.2);
+}
+
+.tailscale__toggle--on {
+  color: var(--red);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.tailscale__toggle--on:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.2);
+}
+
+.tailscale__toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tailscale__warning {
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid rgba(255, 193, 7, 0.5);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tailscale__hint {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tailscale__muted {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.tailscale__error {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: var(--red);
+}

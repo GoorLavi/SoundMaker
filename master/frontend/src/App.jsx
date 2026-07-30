@@ -3,10 +3,13 @@ import { setOnAuthLost } from "./api";
 import AlarmCard from "./components/AlarmCard";
 import JellyfinCard from "./components/JellyfinCard";
 import PiholeCard from "./components/PiholeCard";
+import GuestCard from "./components/GuestCard";
+import GuestPage from "./components/GuestPage";
 import SystemHealthCard from "./components/SystemHealthCard";
 import MetricsHistoryCard from "./components/MetricsHistoryCard";
 import LogsCard from "./components/LogsCard";
 import PowerCard from "./components/PowerCard";
+import TailscaleCard from "./components/TailscaleCard";
 import UpdatesCard from "./components/UpdatesCard";
 import LoginScreen from "./components/LoginScreen";
 import "./App.css";
@@ -18,6 +21,9 @@ export default function App() {
   const [authState, setAuthState] = useState("loading"); // "loading" | "authenticated" | "unauthenticated"
   const [activeTab, setActiveTab] = useState(TAB_DASHBOARD);
 
+  // Public guest landing page — rendered without any auth gate.
+  const isGuestPage = window.location.pathname === "/guest";
+
   const handleLogout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -26,13 +32,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isGuestPage) return;
     setOnAuthLost(() => setAuthState("unauthenticated"));
 
     fetch("/api/auth/check")
       .then((res) => res.json())
       .then((data) => setAuthState(data.authenticated ? "authenticated" : "unauthenticated"))
       .catch(() => setAuthState("unauthenticated"));
-  }, []);
+  }, [isGuestPage]);
+
+  if (isGuestPage) return <GuestPage />;
 
   if (authState === "loading") return null;
 
@@ -72,6 +81,7 @@ export default function App() {
             <AlarmCard />
             <JellyfinCard />
             <PiholeCard />
+            <GuestCard />
           </>
         )}
         {activeTab === TAB_SYSTEM && (
@@ -80,6 +90,7 @@ export default function App() {
             <MetricsHistoryCard />
             <LogsCard />
             <PowerCard />
+            <TailscaleCard />
             <UpdatesCard />
           </>
         )}

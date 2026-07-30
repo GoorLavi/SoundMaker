@@ -47,6 +47,15 @@ DEFAULTS: dict[str, Any] = {
             "time": "04:30",
         },
     },
+    "guest.json": {
+        "enabled": False,
+        "ssid": "",
+        "password": "",
+        "security": "WPA",
+        "hidden": False,
+        "welcome_message": "",
+        "show_jellyfin": True,
+    },
 }
 
 

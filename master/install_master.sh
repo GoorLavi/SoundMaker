@@ -74,13 +74,43 @@ install_tailscale() {
 
     if ! tailscale status &> /dev/null; then
         warn "Tailscale installed but not authenticated."
-        warn "After installation completes, run:  sudo tailscale up --ssh"
+        warn "After installation completes, run:  sudo tailscale up --ssh --advertise-exit-node"
     else
         info "Tailscale is running."
     fi
 }
 
 install_tailscale
+
+# Exit-node support: lets the Pi route a remote phone/laptop's entire traffic
+# through the home connection (Pi-hole ad blocking everywhere, safe hotel
+# Wi-Fi). Advertising is toggled from the Web UI (System → Tailscale VPN);
+# the tailnet admin must additionally approve the exit node once in the
+# Tailscale admin console.
+install_tailscale_exit_node() {
+    local run_user="${SUDO_USER:-pi}"
+
+    # 1. IP forwarding — required for tailscaled to route other devices' traffic.
+    info "Enabling IP forwarding for the Tailscale exit node..."
+    cat > /etc/sysctl.d/99-tailscale.conf <<SYSCTLEOF
+# Managed by SoundMaker. Required for the Tailscale exit node.
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1
+SYSCTLEOF
+    sysctl -p /etc/sysctl.d/99-tailscale.conf > /dev/null
+
+    # 2. Let the backend user query and toggle Tailscale without sudo
+    #    (used by the Web UI's Tailscale card).
+    if tailscale status &> /dev/null; then
+        tailscale set --operator="$run_user" 2>/dev/null || \
+            warn "Could not set Tailscale operator — the Web UI Tailscale card will be read-only."
+        info "Tailscale operator set to '$run_user'."
+    else
+        warn "Tailscale not authenticated yet — operator will be set by:  sudo tailscale up --ssh --operator=$run_user"
+    fi
+}
+
+install_tailscale_exit_node
 
 # ---------------------------------------------------------------------------
 # 3. Pi-hole
@@ -406,8 +436,11 @@ info " Spotify OAuth redirect URI (add to Spotify Dashboard):"
 info "   https://$domain/api/spotify/callback"
 info ""
 info " Remote access (Tailscale):"
-info "   Run:  sudo tailscale up --ssh"
+info "   Run:  sudo tailscale up --ssh --operator=${SUDO_USER:-pi}"
 info "   Then access the UI from anywhere via Tailscale."
+info "   Exit node (route phone traffic through home): enable it in the"
+info "   Web UI (System - Tailscale VPN), then approve the device at"
+info "   https://login.tailscale.com/admin/machines"
 info ""
 info " Network: port-forward 80 and 443 on your router to this Pi."
 info "============================================"

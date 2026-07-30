@@ -218,6 +218,31 @@ Three System-tab conveniences for a headless box: restart/reboot without SSH, a 
 
 ---
 
+## Phase 2.11: Guest landing page + Tailscale exit node
+> **Status: DONE**
+
+Two non-audio conveniences: a public `/guest` welcome page with a scan-to-join Wi-Fi QR code, and one-toggle Tailscale exit-node support ("home VPN" — Pi-hole ad blocking and safe browsing for the phone while traveling).
+
+### Backend
+- [x] `guest_manager.py` — guest page config in `state/guest.json`; public view returns `{"enabled": false}` while off so credentials never leak
+- [x] `tailscale_manager.py` — parse `tailscale status --json` + `tailscale debug prefs`; toggle `tailscale set --advertise-exit-node` (no sudo — backend user is the Tailscale operator)
+- [x] API: `GET/PUT /api/guest`, `GET /api/guest/page` (public), `GET /api/tailscale/status`, `POST /api/tailscale/exit-node`
+- [x] Explicit `GET /guest` route serving the SPA shell (StaticFiles only falls back to index.html at `/`)
+
+### Frontend
+- [x] `GuestPage.jsx` — public page at `/guest`, no auth gate: Wi-Fi QR (client-side via `qrcode`, `WIFI:` URI scheme with escaping), SSID + tap-to-copy password, welcome message, optional Jellyfin link
+- [x] `GuestCard.jsx` (Dashboard) — SSID/password/security/hidden/message/Jellyfin-link fields, on-off toggle, "Open guest page" link
+- [x] `TailscaleCard.jsx` (System) — connection info (device, tailnet name, IP), exit-node toggle, "awaiting approval" state with admin-console link, phone usage hint
+
+### Installation
+- [x] `install_master.sh` → `install_tailscale_exit_node()` — IP forwarding via `/etc/sysctl.d/99-tailscale.conf`, backend user as Tailscale operator
+- [x] Migration `009_tailscale_exit_node.sh` for existing deployments
+
+### Documentation
+- [x] Update `README.md` (features, endpoints, exit-node + guest-page sections), `docs/architecture.md` (§21 exit node, §26 guest page, state, deps), `docs/plan.md`
+
+---
+
 ## Phase 3: PulseAudio + Snapcast
 > **Status: TODO**
 

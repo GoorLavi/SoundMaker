@@ -109,3 +109,8 @@
   background: rgba(136, 136, 136, 0.15);
   color: var(--text-muted);
 }
+
+.card__badge--orange {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--orange);
+}

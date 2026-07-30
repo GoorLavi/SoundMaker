@@ -247,7 +247,7 @@ network-online
 
 Lightweight React 19 SPA with Vite, mobile-first dark theme. Built to static files on the dev machine (macOS) and committed to the repo as `master/frontend/dist/`. Served by the FastAPI backend. No SSR, no heavy framework, no Node.js on the Pi.
 
-Dependencies: `react`, `react-dom`, `vite`, `@vitejs/plugin-react` — nothing else.
+Dependencies: `react`, `react-dom`, `qrcode` (guest page Wi-Fi QR), `vite`, `@vitejs/plugin-react` — nothing else.
 
 During development, `npm run dev` runs Vite's dev server with a proxy to the backend (`/api` → `localhost:8000`).
 
@@ -276,7 +276,8 @@ During development, `npm run dev` runs Vite's dev server with a proxy to the bac
 
 #### Navigation (implemented)
 
-- **Top-level tabs** — **Dashboard** (Alarm, Jellyfin, Pi-hole) and **System** (System Health + Updates). Mobile-first tab bar below the header.
+- **Top-level tabs** — **Dashboard** (Alarm, Jellyfin, Pi-hole, Guest Page) and **System** (System Health, History, Logs, Power, Tailscale VPN, Updates). Mobile-first tab bar below the header.
+- **`/guest`** — a public (no-login) guest landing page, rendered by the same SPA. See §26.
 
 #### Alarm / Morning Wake-up (implemented)
 
@@ -481,6 +482,26 @@ Scheduled weekly-reboot config. Not committed to Git.
 - **day** — three-letter weekday (`mon`…`sun`)
 - **time** — local time HH:MM (24-hour)
 
+### `state/guest.json`
+
+Guest landing page config (see §26). Not committed to Git.
+
+```json
+{
+  "enabled": false,
+  "ssid": "MyHomeWiFi",
+  "password": "secret123",
+  "security": "WPA",
+  "hidden": false,
+  "welcome_message": "Make yourself at home!",
+  "show_jellyfin": true
+}
+```
+
+- **enabled** — whether the public `/guest` page is live; while off, the public endpoint returns only `{"enabled": false}` so credentials never leak
+- **security** — `WPA` (covers WPA2/WPA3), `WEP`, or `nopass` (open network)
+- **hidden** — set when the SSID is not broadcast (goes into the QR payload as `H:true`)
+
 ### `state/metrics_history.json`
 
 Rolling 24-hour history of Master vitals for the System-tab graph. Not committed to Git. Kept in memory and written to disk only every ~5 minutes (and on shutdown) to limit SD-card wear.
@@ -668,6 +689,8 @@ SoundMaker/
 │   │   ├── snapcast_api.py      # Snapcast JSON-RPC client
 │   │   ├── pihole_api.py        # Pi-hole v6 REST API client
 │   │   ├── jellyfin_manager.py  # Jellyfin service status checker
+│   │   ├── guest_manager.py     # Guest landing page config (public /guest data)
+│   │   ├── tailscale_manager.py # Tailscale status + exit-node toggle (via operator CLI)
 │   │   ├── state_manager.py     # JSON state persistence
 │   │   ├── system_info.py       # Master system info (CPU, memory, temp, storage, network, OS)
 │   │   ├── metrics_history.py   # 24h vitals sampler (temp/load/memory) for the History graph
@@ -690,6 +713,9 @@ SoundMaker/
 │   │   │       ├── MetricsHistoryCard.jsx # System tab: 24h vitals graph (SVG)
 │   │   │       ├── LogsCard.jsx     # System tab: journal log viewer
 │   │   │       ├── PowerCard.jsx    # System tab: restart / reboot / weekly reboot
+│   │   │       ├── TailscaleCard.jsx # System tab: Tailscale VPN + exit-node toggle
+│   │   │       ├── GuestCard.jsx    # Dashboard: guest page admin (Wi-Fi details, on/off)
+│   │   │       ├── GuestPage.jsx    # Public /guest page (Wi-Fi QR, no login)
 │   │   │       └── UpdatesCard.jsx  # System tab: Updates
 │   │   ├── index.html
 │   │   ├── vite.config.js
@@ -704,7 +730,8 @@ SoundMaker/
 │   │   ├── 005_jellyfin.sh             # Install Jellyfin media server
 │   │   ├── 006_jellyfin_cpu_limit.sh   # Cap Jellyfin CPU (Pi 5 thermal protection)
 │   │   ├── 007_disable_jellyfin.sh     # Disable Jellyfin by default
-│   │   └── 008_power_controls_log_access.sh  # sudoers + journal group for power/logs
+│   │   ├── 008_power_controls_log_access.sh  # sudoers + journal group for power/logs
+│   │   └── 009_tailscale_exit_node.sh  # IP forwarding + Tailscale operator (exit node)
 │   ├── pihole.toml              # Pi-hole v6 config template (placed at /etc/pihole/)
 │   └── install_master.sh        # Master installation script
 │
@@ -1049,10 +1076,31 @@ Look for `suffix = XXXXX.ts.net`. The Web UI URL is then `http://master.<suffix>
 Tailscale is installed by `install_master.sh`. After installation, authenticate once:
 
 ```bash
-sudo tailscale up --ssh
+sudo tailscale up --ssh --operator=goorlavi
 ```
 
 Open the URL Tailscale prints (or run `tailscale status` if nothing is printed) and log in with your Tailscale account. Then install the Tailscale app on your phone/laptop and sign in with the same account. Use `tailscale dns status` on the Pi to see your full hostname (e.g. `master.tail3ac861.ts.net`) and bookmark `http://master.<your-tailnet>.ts.net/` for quick access.
+
+### Exit Node ("home VPN")
+
+Beyond reaching the Web UI, the Master can act as a Tailscale **exit node**: a remote phone/laptop routes *all* of its internet traffic through the home connection. This is not a NordVPN-style anonymizer — traffic exits from the home IP — but it gives:
+
+- **Pi-hole ad blocking everywhere** — the phone's DNS goes through the Pi even away from home
+- **Home-country geo access** while traveling
+- **Safe browsing** on untrusted hotel/airport Wi-Fi
+- No subscription — bandwidth is capped by the home connection's upload speed
+
+Three pieces make it work:
+
+1. **IP forwarding** — `/etc/sysctl.d/99-tailscale.conf` sets `net.ipv4.ip_forward=1` and `net.ipv6.conf.all.forwarding=1` (installer + migration `009`). Without it, tailscaled cannot route other devices' packets.
+2. **Advertising** — the node offers itself with `tailscale set --advertise-exit-node`. Toggled from the Web UI's **System → Tailscale VPN** card. The backend runs the `tailscale` CLI without sudo because the installer sets the backend user as the Tailscale **operator** (`tailscale set --operator=<user>`).
+3. **Approval** — a one-time manual step in the [Tailscale admin console](https://login.tailscale.com/admin/machines): Machines → the Master → Edit route settings → *Use as exit node*. The UI card detects and shows "awaiting approval" until this is done.
+
+To use it: on the phone, Tailscale app → **Exit node** → select the Master. Turn it off when home for full speed.
+
+**Backend module:** `tailscale_manager.py` — parses `tailscale status --json` (connection state, IPs, DNS name, approval) and `tailscale debug prefs` (whether exit-node routes are advertised).
+
+**API:** `GET /api/tailscale/status`, `POST /api/tailscale/exit-node {enabled}` — both require login.
 
 ---
 
@@ -1221,3 +1269,34 @@ The sudoers file grants **only** the two exact `systemd-run` invocations — not
 ```
 
 Journal group membership takes effect the next time the backend service starts; the installer restarts it, and after an "Apply update" the user restarts the backend anyway (now possible from the **Power** card itself).
+
+---
+
+## 26. Guest Landing Page
+
+A public welcome page at **`/guest`** meant to be shown to visitors: a scannable Wi-Fi QR code plus the network name and password in plain text, an optional welcome message, and (optionally) a link to the Jellyfin media library.
+
+### How it works
+
+- The homeowner configures everything from the **Dashboard → Guest Page** card (login required): SSID, password, security type (`WPA`/`WEP`/open), hidden-network flag, welcome message, Jellyfin link toggle, and an on/off switch.
+- Config is stored in `state/guest.json` (see §9).
+- The page itself is served by the same React SPA. `GET /guest` returns the SPA shell (an explicit FastAPI route, since `StaticFiles(html=True)` only falls back to `index.html` at `/`), and the app renders the guest view based on the URL path — no auth gate.
+- The guest view fetches `GET /api/guest/page` (public) and renders the QR client-side with the `qrcode` npm package. The QR payload uses the de-facto `WIFI:` URI scheme (`WIFI:T:WPA;S:<ssid>;P:<password>;;`, with `\;,:"` backslash-escaped), which iOS and Android cameras understand natively.
+
+### Security model
+
+The page is **intentionally public** — its whole purpose is to be shown to someone who is not logged in. Two guardrails:
+
+1. While the page is turned **off** (the default), the public endpoint returns only `{"enabled": false}` — Wi-Fi credentials never leak through it.
+2. Only the guest-facing fields are exposed; the admin endpoints (`GET`/`PUT /api/guest`) require a session like every other API.
+
+Anyone who can reach the Master over the LAN (or the owner's tailnet) can open the page while it's enabled. That is the accepted trade-off: those people are, almost by definition, either already on the Wi-Fi or the owner. Turn the page off when it's not needed.
+
+### API
+
+| Method | Endpoint | Auth | Description |
+| ------ | -------- | ---- | ----------- |
+| GET | `/api/guest` | Yes | Full config for the admin card |
+| PUT | `/api/guest` | Yes | Update config |
+| GET | `/api/guest/page` | No | Guest-visible data; `{"enabled": false}` while off |
+| GET | `/guest` | No | SPA shell for the guest page |

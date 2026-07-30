@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Body, Cookie, Depends, FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from pydantic import BaseModel
@@ -42,6 +42,8 @@ import jellyfin_manager
 import power_manager
 import metrics_history
 import system_logs
+import guest_manager
+import tailscale_manager
 
 logger = logging.getLogger(__name__)
 
@@ -382,8 +384,83 @@ def jellyfin_status():
 
 
 # ---------------------------------------------------------------------------
+# Guest landing page (admin endpoints protected; the page itself is public)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/guest", dependencies=[Depends(require_auth)])
+def guest_get():
+    """Full guest page config for the admin card."""
+    return guest_manager.get_config()
+
+
+class GuestUpdate(BaseModel):
+    enabled: bool = False
+    ssid: str = ""
+    password: str = ""
+    security: str = "WPA"
+    hidden: bool = False
+    welcome_message: Optional[str] = None
+    show_jellyfin: bool = True
+
+
+@app.put("/api/guest", dependencies=[Depends(require_auth)])
+def guest_put(body: GuestUpdate):
+    """Update the guest page config (Wi-Fi details, welcome message, on/off)."""
+    return guest_manager.set_config(
+        body.enabled,
+        body.ssid,
+        body.password,
+        body.security,
+        body.hidden,
+        body.welcome_message,
+        body.show_jellyfin,
+    )
+
+
+@app.get("/api/guest/page")
+def guest_page_data():
+    """Public data for the guest landing page. Reveals nothing while disabled."""
+    return guest_manager.get_public_page()
+
+
+# ---------------------------------------------------------------------------
+# Tailscale VPN / exit node (protected)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/tailscale/status", dependencies=[Depends(require_auth)])
+def tailscale_status():
+    """Tailscale connection info + exit-node state for the System tab."""
+    return tailscale_manager.get_status()
+
+
+class ExitNodeUpdate(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/tailscale/exit-node", dependencies=[Depends(require_auth)])
+def tailscale_exit_node(body: ExitNodeUpdate):
+    """Advertise (or stop advertising) this device as a Tailscale exit node."""
+    if not tailscale_manager.set_exit_node(body.enabled):
+        return JSONResponse({"error": "Could not update exit node setting"}, status_code=502)
+    return {"ok": True, "advertised": body.enabled}
+
+
+# ---------------------------------------------------------------------------
 # Static frontend (only mounted if the build exists)
 # ---------------------------------------------------------------------------
+
+@app.get("/guest", include_in_schema=False)
+def guest_page_shell():
+    """Serve the SPA shell at /guest so the guest page has a clean shareable URL.
+
+    StaticFiles(html=True) only falls back to index.html at "/", so this
+    explicit route is needed; the React app renders the guest view based on
+    the URL path.
+    """
+    index = FRONTEND_DIR / "index.html"
+    if not index.is_file():
+        return JSONResponse({"error": "Frontend not built"}, status_code=404)
+    return FileResponse(index, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 class SPAStaticFiles(StaticFiles):
     """Serve built frontend, but tell clients never to cache the HTML shell.

@@ -53,9 +53,29 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1 className="header__title">SoundMaker</h1>
-        <button className="header__logout" onClick={handleLogout}>
-          Log out
-        </button>
+        <div className="header__actions">
+          <button
+            className="header__refresh"
+            onClick={() => window.location.reload()}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          </button>
+          <button className="header__logout" onClick={handleLogout}>
+            Log out
+          </button>
+        </div>
       </header>
       <nav className="tabs" role="tablist" aria-label="Main sections">
         <button

@@ -125,6 +125,10 @@ After installation, the Master exposes:
 | Jellyfin | `http://master.local:8096` | Media server for video streaming (disabled by default) |
 | Pi-hole DNS | port 53 | Point your router's DHCP DNS to Master's IP |  
 
+### Using the Web UI as a phone app
+
+Install the Web UI on your phone's home screen (iOS Safari → Share → **Add to Home Screen**). It opens full-screen with no browser chrome, so the app provides its own refresh: **pull down from the top of the page** (pull-to-refresh), or tap the **↻ button** in the header. A refresh also picks up the new frontend after an "Apply update".
+
 ## System Tab
 
 The Web UI's **System** tab is a read-only-plus-controls view of the Master itself:

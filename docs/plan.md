@@ -243,6 +243,21 @@ Two non-audio conveniences: a public `/guest` welcome page with a scan-to-join W
 
 ---
 
+## Phase 2.12: In-app refresh for the installed web app
+> **Status: DONE**
+
+The Web UI is used as an iOS home-screen web app (standalone — no browser chrome), which left no way to reload a stale page short of killing and relaunching the app. The app now ships its own refresh; no backend or device changes (pure frontend, delivered via the committed `dist/`).
+
+### Frontend
+- [x] `PullToRefresh.jsx` + `.css` — custom pull-to-refresh: document-level touch listeners, floating indicator, release past threshold → `location.reload()`; ignores gestures starting inside inner scrolled panes (e.g. log viewer); mounted once in `main.jsx` so it covers login, dashboard and `/guest`
+- [x] Header ↻ refresh button next to "Log out" (`App.jsx` / `App.css`)
+- [x] `overscroll-behavior-y: contain` (`index.css`) so a browser's native pull-to-refresh never double-fires alongside the in-app one
+
+### Documentation
+- [x] Update `README.md` (phone-app usage + refresh), `docs/architecture.md` (§7 Web UI — installed-app refresh), `docs/plan.md`
+
+---
+
 ## Phase 3: PulseAudio + Snapcast
 > **Status: TODO**
 

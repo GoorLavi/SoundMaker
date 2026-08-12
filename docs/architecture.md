@@ -251,6 +251,15 @@ Dependencies: `react`, `react-dom`, `qrcode` (guest page Wi-Fi QR), `vite`, `@vi
 
 During development, `npm run dev` runs Vite's dev server with a proxy to the backend (`/api` → `localhost:8000`).
 
+### Installed as a home-screen app (refresh)
+
+The UI is meant to be installed on the phone's home screen (iOS Safari → Share → **Add to Home Screen**; enabled by `apple-mobile-web-app-capable` in `index.html`). Installed like that it runs standalone with no browser chrome — no address bar, no reload button, and no native pull-to-refresh — so a stale page could only be fixed by killing the app. The app therefore ships its own page refresh:
+
+- **Pull-to-refresh** — `components/PullToRefresh.jsx`, mounted once in `main.jsx` so it works on every screen (login, dashboard, `/guest`). Document-level touch listeners drive a floating indicator; pulling down from the top of the page past a threshold and releasing calls `location.reload()`. Gestures that begin inside an inner scrolled pane (e.g. the log viewer) or that turn into normal scrolling are ignored. `overscroll-behavior-y: contain` (in `index.css`) keeps a browser's native refresh gesture from double-firing alongside it.
+- **Header ↻ button** — next to "Log out"; simply reloads the page.
+
+The backend serves `index.html` with `Cache-Control: no-cache, must-revalidate` (the hashed files under `assets/` change name every build), so a refresh — or relaunching the installed app — also picks up a newly deployed frontend build.
+
 ### Screens and Controls
 
 #### Main Dashboard

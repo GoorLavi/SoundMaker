@@ -11,6 +11,33 @@
   padding: 20px 0 12px;
 }
 
+.header__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header__refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.header__refresh:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.header__refresh svg {
+  width: 15px;
+  height: 15px;
+}
+
 .header__logout {
   font-size: 0.8rem;
   font-weight: 500;

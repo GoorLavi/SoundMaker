@@ -25,6 +25,9 @@
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
+  /* The app ships its own pull-to-refresh (components/PullToRefresh.jsx);
+     keep the browser's native refresh gesture from double-firing on top. */
+  overscroll-behavior-y: contain;
 }
 
 body {

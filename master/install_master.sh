@@ -62,6 +62,8 @@ apt-get install -y -qq python3 python3-venv curl git > /dev/null
 # ---------------------------------------------------------------------------
 
 install_tailscale() {
+    local run_user="${SUDO_USER:-pi}"
+
     if command -v tailscale &> /dev/null; then
         info "Tailscale is already installed, skipping."
     else
@@ -74,7 +76,9 @@ install_tailscale() {
 
     if ! tailscale status &> /dev/null; then
         warn "Tailscale installed but not authenticated."
-        warn "After installation completes, run:  sudo tailscale up --ssh --advertise-exit-node"
+        # --operator lets the backend query and toggle Tailscale without sudo.
+        # The exit node itself is advertised from the Web UI, not here.
+        warn "After installation completes, run:  sudo tailscale up --ssh --operator=$run_user"
     else
         info "Tailscale is running."
     fi
@@ -102,9 +106,11 @@ SYSCTLEOF
     # 2. Let the backend user query and toggle Tailscale without sudo
     #    (used by the Web UI's Tailscale card).
     if tailscale status &> /dev/null; then
-        tailscale set --operator="$run_user" 2>/dev/null || \
+        if tailscale set --operator="$run_user" 2>/dev/null; then
+            info "Tailscale operator set to '$run_user'."
+        else
             warn "Could not set Tailscale operator — the Web UI Tailscale card will be read-only."
-        info "Tailscale operator set to '$run_user'."
+        fi
     else
         warn "Tailscale not authenticated yet — operator will be set by:  sudo tailscale up --ssh --operator=$run_user"
     fi

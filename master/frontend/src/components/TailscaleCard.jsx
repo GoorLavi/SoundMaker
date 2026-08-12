@@ -84,9 +84,10 @@ export default function TailscaleCard() {
     );
   }
 
-  const { running, hostname, dns_name, ip, exit_node, admin_console_url } = status;
+  const { running, backend_state, hostname, dns_name, ip, exit_node, admin_console_url } = status;
   const advertised = Boolean(exit_node?.advertised);
   const approved = Boolean(exit_node?.approved);
+  const needsLogin = backend_state === "NeedsLogin";
 
   return (
     <section className="card tailscale">
@@ -117,6 +118,15 @@ export default function TailscaleCard() {
           </div>
         )}
       </div>
+
+      {!running && (
+        <p className="tailscale__warning">
+          {needsLogin
+            ? "Tailscale is installed but not signed in. SSH in and run: "
+            : "tailscaled is not running. SSH in and check it, or sign in with: "}
+          <code>sudo tailscale up --ssh --operator=$(whoami)</code>
+        </p>
+      )}
 
       <div className="tailscale__exit">
         <div className="tailscale__exit-header">
